@@ -1,7 +1,7 @@
 // Usher service worker: keeps the app shell and the artwork on the device so the app opens instantly.
 // Of /api/ it keeps only artwork (/api/art/); lists and account data go straight to the network (the app keeps its
 // own last copies, per account: see `lists.restore` in data.js). Signing out empties both.
-const VERSION = "usher-1.0.0";
+const VERSION = "usher-1.0.1";
 const SHELL = ["/", "/index.html", "/app.css", "/account.css", "/sheets.css", "/discover.css", "/media.css", "/menu.css", "/notify.css", "/storage.css", "/status.css", "/changelog.css", "/app.js", "/data.js", "/dom.js", "/util.js", "/posters.js", "/prefetch.js", "/rows.js", "/filters.js", "/device.js", "/menu.js", "/storage.js", "/watch.js",
   "/updater.js", "/shell.js", "/home.js", "/downloads.js", "/upcoming.js", "/status.js", "/settings.js", "/notify.js", "/advanced.js", "/updates.js", "/sheets.js", "/sheetdrag.js", "/search.js",
   "/discover.js", "/account.js", "/changelog.js", "/startup.js", "/manifest.webmanifest",

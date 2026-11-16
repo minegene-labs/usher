@@ -94,6 +94,11 @@ jobs:
           coverage run -m unittest discover -s tests -t .
           coverage report
 
+      - name: Build the image
+        # Build only, nothing is started: a Dockerfile that doesn't parse or build fails here, before Release
+        # can move stable. The slower start-up check stays in the Weekly checks workflow.
+        run: docker build -t usher-check .
+
       - name: Check the pull request text
         # The text must not state a test count or result: this run is the result, and How to test names the
         # command to run. A count or "all"/"every" must come before "tests", so "adds three tests" and "once

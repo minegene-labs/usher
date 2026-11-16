@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.0.1]
+
+### Fixed
+- Installs that build Usher from source can update again: the build no longer stops on a comment placed after the base image.
+
 ## [1.0.0]
 
 ### Added

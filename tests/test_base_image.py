@@ -6,7 +6,8 @@ import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-FROM = re.compile(r"(?m)^FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+\S+)?\s*(?:#\s*(.*))?$")
+FROM = re.compile(r"(?m)^FROM\s+(?:--\S+\s+)*(\S+)(?:\s+AS\s+\S+)?[ \t]*$")
+TRAILING_COMMENT = re.compile(r"\s#")
 PINNED = re.compile(r"python:(\d+\.\d+)-slim@sha256:[0-9a-f]{64}")
 
 
@@ -19,6 +20,13 @@ def base_minor(dockerfile):
     if not match:
         raise AssertionError("the base image has no minor version and digest")
     return match.group(1)
+
+
+def trailing_comments(dockerfile):
+    """Line numbers of instruction lines that end with a comment, which Docker reads as arguments."""
+    return [
+        number for number, line in enumerate(dockerfile.splitlines(), 1) if line.strip() and not line.lstrip().startswith("#") and TRAILING_COMMENT.search(line)
+    ]
 
 
 class BaseImageTests(unittest.TestCase):
@@ -41,9 +49,19 @@ class BaseImageTests(unittest.TestCase):
         self.assertIsNotNone(PINNED.fullmatch(f"python:3.13-slim@sha256:{digest}"))
         self.assertEqual(base_images("FROM python:3-slim\nRUN true\n"), ["python:3-slim"])
 
-    def test_the_version_is_in_a_trailing_comment(self):
-        comment = FROM.search(self.dockerfile).group(2)
-        self.assertEqual(comment, f"Python {base_minor(self.dockerfile)}")
+    def test_the_version_is_in_a_comment_above_from(self):
+        lines = self.dockerfile.splitlines()
+        index = next(i for i, line in enumerate(lines) if line.startswith("FROM "))
+        self.assertTrue(lines[index - 1].startswith("#"))
+        self.assertIn(f"Python {base_minor(self.dockerfile)}", lines[index - 1])
+
+    def test_no_instruction_ends_with_a_comment(self):
+        self.assertEqual(trailing_comments(self.dockerfile), [])
+
+    def test_the_check_catches_a_comment_after_an_instruction(self):
+        self.assertEqual(trailing_comments("FROM python:3.13-slim # Python 3.13\n"), [1])
+        self.assertEqual(trailing_comments("# note\nRUN true # why\n"), [2])
+        self.assertEqual(trailing_comments("# only a comment\nFROM a\n"), [])
 
     def test_the_tests_run_on_the_images_minor_version(self):
         minor = base_minor(self.dockerfile)
