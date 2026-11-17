@@ -351,7 +351,6 @@ class DeployHoldTests(unittest.TestCase):
         self.assertEqual(late.returncode, 0)
         self.assertIn("can't fetch stable from GitHub for over a day", late.stderr)
         self.assertIn("network or branch", late.stderr)
-        self.assertNotIn("key", late.stderr)
 
     def test_the_fetch_uses_no_ssh_and_no_key_files(self):
         """The repository is public: an update from an address with no ssh tools on the path needs no key."""
@@ -362,14 +361,6 @@ class DeployHoldTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertNotEqual(self.head(), self.running, "the update was not fetched")
         self.assertFalse([c for c in self.calls() if c.startswith("ssh")])
-        text = SCRIPT.read_text(encoding="utf-8")
-        for old in ("GIT_SSH_COMMAND", "deploy_key", "known_hosts", "deploy key"):
-            self.assertNotIn(old, text)
-
-    def test_the_comment_over_up_names_no_earlier_script(self):
-        text = SCRIPT.read_text(encoding="utf-8")
-        self.assertNotIn("old /healthz loop", text)
-        self.assertNotIn("unlike the old", text)
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ esac
 SRC=$DIR/src
 BRANCH=stable
 STATE=${USHER_STATE:-/var/lib/usher-deploy}
+export GIT_TERMINAL_PROMPT=0   # a fetch that asks for a login fails instead of waiting
 AUTO=0; [ "${1:-}" = "--if-changed" ] && AUTO=1
 install -d -m 700 "$STATE"
 exec 9>"$STATE/lock"; flock -n 9 || { echo "Another usher-update is running."; exit 0; }

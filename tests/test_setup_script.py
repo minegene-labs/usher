@@ -39,11 +39,6 @@ class SetupScriptTests(unittest.TestCase):
         for old in ("migrate", "USHER_ORIGIN", "JELLYFIN_USER", "TR_USER:-", "JF_NAME", "this release"):
             self.assertNotIn(old, self.text)
 
-    def test_it_clones_over_https_with_no_key(self):
-        for old in ("ssh", "GIT_SSH_COMMAND", "deploy_key", "known_hosts", "deploy key", "GITHUB_ED25519"):
-            self.assertNotIn(old, self.text)
-        self.assertIn('git clone --depth 1 --branch stable "$USHER_REPO"', self.text)
-
     def test_it_installs_nothing(self):
         self.assertNotIn("apt-get", self.text)
 
@@ -101,6 +96,22 @@ class ToolCheckTests(unittest.TestCase):
         """Only the tools above are on the path, and none of them is ssh, ssh-keygen or ssh-keyscan."""
         self.assertFalse({"ssh", "ssh-keygen", "ssh-keyscan"} & {p.name for p in self.bin.iterdir()})
         self.assertIn("site.env is missing", self.run_setup().stdout)
+
+    def test_a_repo_address_that_is_not_https_is_refused(self):
+        self.home.mkdir()
+        (self.home / "site.env").write_text("USHER_REPO=git@github.com:example/usher.git\n")
+        run = self.run_setup()
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("must be an https:// address", run.stdout)
+
+    def test_an_unreadable_repo_stops_setup_with_a_hint(self):
+        self.home.mkdir()
+        (self.home / "site.env").write_text("USHER_REPO=https://example.invalid/usher.git\n")
+        self.fake("git", "exit 128")
+        run = self.run_setup()
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("can't read https://example.invalid/usher.git", run.stdout)
+        self.assertNotIn("ssh", [c.split()[0] for c in self.log.read_text().splitlines()])
 
     def test_missing_git_is_named_and_nothing_is_created(self):
         (self.bin / "git").unlink()

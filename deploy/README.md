@@ -81,7 +81,7 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
 
 ## Security model
 
-- **The server only pulls.** It fetches `stable` over HTTPS from the public repository, with no key and no credential of any kind. There is no CI runner on the server, no webhook, and nothing on the internet can connect to it to deploy; GitHub holds no credential for the server.
+- **The server only pulls.** It fetches `stable` over HTTPS from the public repository, with no key and no credential of any kind; TLS and GitHub's certificate are what vouch for it, and `setup.sh` refuses an address that isn't `https://`. There is no CI runner on the server, no webhook, and nothing on the internet can connect to it to deploy; GitHub holds no credential for the server.
 - **Only tested code is deployed.** `stable` moves only after the tests pass on exactly that content.
 - **What runs as root never arrives by a deploy.** `usher-update`, the timer and service units and `setup.sh` are installed by hand from `deploy/` and run from `/usr/local/bin` and `/etc/systemd/system`, so a merged pull request can't change what runs as root. Changes that decide what Docker runs (`Dockerfile`, `compose.yaml`) wait for a person, as above.
 - **The container is locked down:** runs as 1000:1001, read-only filesystem, all capabilities dropped, `no-new-privileges`, memory and process limits. It mounts only its data, its settings, the three `config.xml` files read-only, and the recycle bin, and never the Docker socket.
@@ -90,7 +90,7 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
 
 ## Upgrading
 
-- **An install made before the repository was public** may still have `deploy_key`, `deploy_key.pub` and `known_hosts` in the install folder. They are unused now and can be deleted. If its `origin` is an SSH address, point it at the HTTPS one: `sudo git -C /opt/usher/src remote set-url origin https://github.com/<owner>/<repo>.git`, then reinstall `usher-update` as below.
+- **An install made before the repository was public** has an SSH address as its source. Switch it before reinstalling `usher-update`: set `USHER_REPO` in `site.env` to the HTTPS address and run `sudo bash setup.sh` again (it points `src/` at it), or run `sudo git -C <install folder>/src remote set-url origin https://github.com/<owner>/<repo>.git`. Then reinstall `usher-update` as below, delete `deploy_key`, `deploy_key.pub` and `known_hosts` from the install folder, and remove the deploy key in the repository's settings on GitHub.
 - **Usually nothing:** the timer deploys each new version within 15 minutes.
 - **A held change** (`needs-server`): read the pull request, do what it says, then `sudo usher-update`.
 - **A change to `usher-update`, the units or `setup.sh`:** they aren't updated by a deploy. Re-run `sudo bash /opt/usher/src/deploy/setup.sh`, or reinstall them by hand:

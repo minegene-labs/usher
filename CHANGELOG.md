@@ -5,7 +5,7 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ## [1.1.0]
 
 ### Changed
-- Setting up and updating a server no longer needs an SSH key: Usher is fetched over HTTPS from the public repository. An existing install keeps working; to switch it, point its source at the HTTPS address, reinstall the update script and delete the unused key files (steps in the deploy guide).
+- Setting up and updating a server no longer needs an SSH key: Usher is fetched over HTTPS from the public repository. An existing install must first point its source at the HTTPS address, then reinstall the update script and delete the unused key (steps in the deploy guide).
 
 ## [1.0.1]
 

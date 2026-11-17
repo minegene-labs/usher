@@ -42,6 +42,8 @@ set -a
 . "$SITE"
 set +a
 [ -n "${USHER_REPO:-}" ] || { echo "FAIL: USHER_REPO is empty in $SITE"; exit 1; }
+case $USHER_REPO in https://*) ;; *) echo "FAIL: USHER_REPO in $SITE must be an https:// address, not '$USHER_REPO'"; exit 1 ;; esac
+export GIT_TERMINAL_PROMPT=0   # a repository that asks for a login fails instead of waiting
 TOML="$DIR/config/usher.toml"
 say() { printf '\n== %s\n' "$1"; }
 
@@ -55,6 +57,7 @@ echo "PASS the server can read the repo"
 # 2. Code: always exactly what's on stable (main once its tests have passed) -------
 say "Code"
 if [ -d "$DIR/src/.git" ]; then
+  git -C "$DIR/src" remote set-url origin "$USHER_REPO"
   git -C "$DIR/src" fetch --depth 1 origin stable && git -C "$DIR/src" reset --hard FETCH_HEAD
 else
   git clone --depth 1 --branch stable "$USHER_REPO" "$DIR/src"
