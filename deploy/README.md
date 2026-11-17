@@ -14,7 +14,6 @@ Usher lives in one folder on the server: `/opt/usher` by default. To use another
 | `.env` | Root only (600): the secrets, and the four things from this machine the container mounts (below) |
 | `site.env` | `USHER_REPO` (the repo address the server pulls from) and `TZ`. See `deploy/site.env.example`. |
 | `data/` | Accounts, requests, the Web Push key; only the container's user can read it (700) |
-| `deploy_key`, `known_hosts` | The read-only deploy key and GitHub's pinned host key |
 
 The four mounts `compose.yaml` reads from `.env`, all full paths on this machine:
 
@@ -29,7 +28,7 @@ If one is missing, Docker Compose refuses to start Usher and names it.
 
 ## Requirements
 
-- Linux with systemd (`systemctl`), Docker Engine with Docker Compose 2.20.2 or later (for `up --wait-timeout` and the health check's `start_interval`), `git`, `curl`, `python3` (3.11 or later), `ssh` with `ssh-keygen` and `ssh-keyscan`, `flock` and `logger` (util-linux), and `cmp` (diffutils). `setup.sh` checks for each of them before it changes anything and names any that are missing; it installs none of them, so use your distribution's packages.
+- Linux with systemd (`systemctl`), Docker Engine with Docker Compose 2.20.2 or later (for `up --wait-timeout` and the health check's `start_interval`), `git`, `curl`, `python3` (3.11 or later), `flock` and `logger` (util-linux), and `cmp` (diffutils). `setup.sh` checks for each of them before it changes anything and names any that are missing; it installs none of them, so use your distribution's packages.
 - Docker Engine 25 or later makes the first health check quick: while Usher starts, Docker checks it every 2 seconds, so a deploy finishes within seconds of Usher answering. An older engine first checks after a minute, so a deploy takes longer, and a start that fails its first check may reach the 2-minute limit and be rolled back. `usher-update` holds an update while Docker Compose is older than 2.20.2, and says so.
 - Jellyfin, Sonarr, Radarr, Prowlarr and Transmission already running, reachable from the server (Usher uses the host's network). Their addresses go in `usher.toml`; the defaults are the usual ports on `127.0.0.1`.
 - A reverse proxy with HTTPS in front of Usher, such as Caddy. Usher itself listens on `127.0.0.1:8484` only.
@@ -47,7 +46,7 @@ If one is missing, Docker Compose refuses to start Usher and names it.
    sudo bash setup.sh
    ```
 3. Follow what it asks. It is safe to run again at any time, and only asks for what is still missing:
-   - makes a deploy key and shows it: add it to the repo on GitHub as a deploy key with write access **unticked**. It checks GitHub's host key against the fingerprint written in the script before trusting it.
+   - checks that it can read `USHER_REPO`, which is the public https:// address of the repo
    - clones `stable` into `src/`
    - offers to create `config/usher.toml` from the example, and stops until it names the address, the viewing account and the Transmission user
    - asks for the Transmission password, a Jellyfin API key (checked against the viewing account) and, optionally, a TMDb token for Discover, and keeps them in `.env`
@@ -70,7 +69,7 @@ Pull requests merge into `main` once their tests pass, and the Release workflow 
 
 `usher-autodeploy.timer` runs `usher-update --if-changed` every 15 minutes (5 minutes after boot, with up to a minute's random delay):
 
-- **Nothing new:** it fetches `stable` with the read-only deploy key, finds nothing has moved, and stays quiet.
+- **Nothing new:** it fetches `stable` over HTTPS, finds nothing has moved, and stays quiet.
 - **An app change:** it resets `src/` to the new commit, rebuilds, restarts, and lets Docker Compose wait up to 2 minutes for the new container to be healthy (its health check asks `/healthz`). The container is made from the image just built, so a healthy one runs the new version.
 - **Held:** if `Dockerfile` or `deploy/compose.yaml` differs from what is running (including a hand edit of the installed `compose.yaml`, or a Dockerfile change since the running image was built), it deploys nothing. It logs the hold once and waits for a person to read the change and run `sudo usher-update`. Pull requests touching those files are labelled `needs-server`.
 - **Rollback:** if the new version doesn't build or isn't healthy in time, it puts back the previous code, `compose.yaml` and image, restarts, and waits the same way for the old version to be healthy. It doesn't retry the failed commit until `stable` moves again.
@@ -82,7 +81,7 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
 
 ## Security model
 
-- **The server only pulls.** It fetches `stable` over SSH with a deploy key that can't write, and checks GitHub against a pinned host key. There is no CI runner on the server, no webhook, and nothing on the internet can connect to it to deploy; GitHub holds no credential for the server.
+- **The server only pulls.** It fetches `stable` over HTTPS from the public repository, with no key and no credential of any kind. There is no CI runner on the server, no webhook, and nothing on the internet can connect to it to deploy; GitHub holds no credential for the server.
 - **Only tested code is deployed.** `stable` moves only after the tests pass on exactly that content.
 - **What runs as root never arrives by a deploy.** `usher-update`, the timer and service units and `setup.sh` are installed by hand from `deploy/` and run from `/usr/local/bin` and `/etc/systemd/system`, so a merged pull request can't change what runs as root. Changes that decide what Docker runs (`Dockerfile`, `compose.yaml`) wait for a person, as above.
 - **The container is locked down:** runs as 1000:1001, read-only filesystem, all capabilities dropped, `no-new-privileges`, memory and process limits. It mounts only its data, its settings, the three `config.xml` files read-only, and the recycle bin, and never the Docker socket.
@@ -91,6 +90,7 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
 
 ## Upgrading
 
+- **An install made before the repository was public** may still have `deploy_key`, `deploy_key.pub` and `known_hosts` in the install folder. They are unused now and can be deleted. If its `origin` is an SSH address, point it at the HTTPS one: `sudo git -C /opt/usher/src remote set-url origin https://github.com/<owner>/<repo>.git`, then reinstall `usher-update` as below.
 - **Usually nothing:** the timer deploys each new version within 15 minutes.
 - **A held change** (`needs-server`): read the pull request, do what it says, then `sudo usher-update`.
 - **A change to `usher-update`, the units or `setup.sh`:** they aren't updated by a deploy. Re-run `sudo bash /opt/usher/src/deploy/setup.sh`, or reinstall them by hand:

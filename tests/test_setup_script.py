@@ -10,7 +10,7 @@ from pathlib import Path
 SETUP = Path(__file__).resolve().parent.parent / "deploy" / "setup.sh"
 BASH = shutil.which("bash")
 # The tools deploy/README.md lists under Requirements, as setup.sh looks for them
-TOOLS = ("git", "curl", "ssh", "ssh-keygen", "ssh-keyscan", "flock", "cmp", "logger", "systemctl", "python3", "docker")
+TOOLS = ("git", "curl", "flock", "cmp", "logger", "systemctl", "python3", "docker")
 
 
 class SetupScriptTests(unittest.TestCase):
@@ -38,6 +38,11 @@ class SetupScriptTests(unittest.TestCase):
         # no fallback to the old site.env settings, and no migration from them
         for old in ("migrate", "USHER_ORIGIN", "JELLYFIN_USER", "TR_USER:-", "JF_NAME", "this release"):
             self.assertNotIn(old, self.text)
+
+    def test_it_clones_over_https_with_no_key(self):
+        for old in ("ssh", "GIT_SSH_COMMAND", "deploy_key", "known_hosts", "deploy key", "GITHUB_ED25519"):
+            self.assertNotIn(old, self.text)
+        self.assertIn('git clone --depth 1 --branch stable "$USHER_REPO"', self.text)
 
     def test_it_installs_nothing(self):
         self.assertNotIn("apt-get", self.text)
@@ -92,14 +97,19 @@ class ToolCheckTests(unittest.TestCase):
         self.assertIn("site.env is missing", run.stdout)
         self.assertFalse(self.home.exists())
 
+    def test_no_ssh_tools_are_needed(self):
+        """Only the tools above are on the path, and none of them is ssh, ssh-keygen or ssh-keyscan."""
+        self.assertFalse({"ssh", "ssh-keygen", "ssh-keyscan"} & {p.name for p in self.bin.iterdir()})
+        self.assertIn("site.env is missing", self.run_setup().stdout)
+
     def test_missing_git_is_named_and_nothing_is_created(self):
         (self.bin / "git").unlink()
         self.assertStopsNaming(self.run_setup(), "git")
 
     def test_every_missing_tool_is_named_in_one_line(self):
         (self.bin / "flock").unlink()
-        (self.bin / "ssh-keyscan").unlink()
-        self.assertStopsNaming(self.run_setup(), "flock", "ssh-keyscan")
+        (self.bin / "cmp").unlink()
+        self.assertStopsNaming(self.run_setup(), "flock", "cmp")
 
     def test_missing_docker_is_named_once(self):
         (self.bin / "docker").unlink()

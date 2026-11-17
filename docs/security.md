@@ -27,7 +27,7 @@ Usher is meant for a household or small group: a handful of trusted people, one 
 - API keys are read from Sonarr's, Radarr's and Prowlarr's own `config.xml`, mounted read-only. The Transmission password, Jellyfin key and TMDb token live in `.env` in the install folder (root, 600).
 - The data folder (`data` in the install folder) is 700, and every file Usher keeps there (accounts database, push key, Discover rows, replacements) is written 600, whatever the umask.
 - Container: runs as 1000:1001, read-only filesystem, all capabilities dropped, `no-new-privileges`, 256 MB memory cap.
-- The server pulls this repo with a read-only deploy key and a pinned GitHub host key; nothing reaches into it (no runner, no inbound access). See [deploy/README.md](../deploy/README.md).
+- The server pulls this public repo over HTTPS, with no key or credential; nothing reaches into it (no runner, no inbound access). See [deploy/README.md](../deploy/README.md).
 
 ## Secrets
 

@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.1.0]
+
+### Changed
+- Setting up and updating a server no longer needs an SSH key: Usher is fetched over HTTPS from the public repository. An existing install keeps working; to switch it, point its source at the HTTPS address, reinstall the update script and delete the unused key files (steps in the deploy guide).
+
 ## [1.0.1]
 
 ### Fixed

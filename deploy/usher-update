@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deploy the latest tested Usher (branch stable, read-only deploy key): rebuild, restart, let Docker
+# Deploy the latest tested Usher (branch stable, fetched over HTTPS): rebuild, restart, let Docker
 # Compose wait until the new container is healthy, and roll back if it isn't within 2 minutes.
 #   usher-update               deploy now, by hand
 #   usher-update --if-changed  for the 15-minute timer: quiet unless stable moved; a change to
@@ -28,7 +28,6 @@ STATE=${USHER_STATE:-/var/lib/usher-deploy}
 AUTO=0; [ "${1:-}" = "--if-changed" ] && AUTO=1
 install -d -m 700 "$STATE"
 exec 9>"$STATE/lock"; flock -n 9 || { echo "Another usher-update is running."; exit 0; }
-export GIT_SSH_COMMAND="ssh -i $DIR/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$DIR/known_hosts -o StrictHostKeyChecking=yes"
 # Under systemd, stdout and stderr already go to the journal as usher-update, so log each line once
 # there (<3> marks an error) and use logger only when run by hand.
 if [ -n "${JOURNAL_STREAM:-}" ]; then
@@ -52,7 +51,7 @@ checked() {   # checked HELD FAILED (true or false): the newest version on stabl
   post "{\"result\": \"checked\", \"newest\": \"$NEWVER\", \"held\": $1, \"failed\": $2}"
 }
 # The image's health check asks /healthz. Compose recreates the container when the image changes, so a
-# healthy container runs the version in src; unlike the old /healthz loop, the version itself isn't compared.
+# healthy container runs the version in src.
 up() { docker compose up -d "$@" --wait --wait-timeout 120; }
 atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the first or later (as in setup.sh)
   local IFS=. want have i v=${2#v}
@@ -65,7 +64,7 @@ atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the firs
 PREV=$(git -C "$SRC" rev-parse HEAD)
 if ! git -C "$SRC" fetch -q --depth 1 origin "$BRANCH"; then
   if [ -n "$(find "$STATE/fetched" -mmin +1440 2>/dev/null)" ]; then
-    bad "Usher updates: can't fetch $BRANCH from GitHub for over a day (deploy key, network or branch)."
+    bad "Usher updates: can't fetch $BRANCH from GitHub for over a day (network or branch)."
   fi
   [ $AUTO = 1 ] && exit 0   # a short outage isn't worth a failed unit in the digest
   exit 1

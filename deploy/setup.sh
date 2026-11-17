@@ -17,7 +17,7 @@ atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the firs
   done
 }
 MISSING=()
-for tool in git curl ssh ssh-keygen ssh-keyscan flock cmp logger systemctl docker; do command -v "$tool" >/dev/null || MISSING+=("$tool"); done
+for tool in git curl flock cmp logger systemctl docker; do command -v "$tool" >/dev/null || MISSING+=("$tool"); done
 command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null \
   || MISSING+=("python3 3.11 or later")
 if command -v docker >/dev/null && ! atleast 2.20.2 "$(docker compose version --short 2>/dev/null || true)"; then
@@ -43,24 +43,13 @@ set -a
 set +a
 [ -n "${USHER_REPO:-}" ] || { echo "FAIL: USHER_REPO is empty in $SITE"; exit 1; }
 TOML="$DIR/config/usher.toml"
-GITHUB_ED25519='SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU'
 say() { printf '\n== %s\n' "$1"; }
 
-# 1. Read-only deploy key -----------------------------------------------------
-say "Deploy key (read-only)"
+# 1. Install folder and access ------------------------------------------------------
+say "Access to the repository"
 mkdir -p "$DIR" && chmod 755 "$DIR"
-[ -f "$DIR/deploy_key" ] || ssh-keygen -q -t ed25519 -N "" -C "usher server (read-only)" -f "$DIR/deploy_key"
-chmod 600 "$DIR/deploy_key"
-ssh-keyscan -t ed25519 github.com 2>/dev/null > "$DIR/known_hosts.new"
-FP=$(ssh-keygen -lf "$DIR/known_hosts.new" | awk '{print $2}')
-[ "$FP" = "$GITHUB_ED25519" ] || { echo "FAIL: github.com host key is $FP, expected $GITHUB_ED25519"; exit 1; }
-mv "$DIR/known_hosts.new" "$DIR/known_hosts"
-export GIT_SSH_COMMAND="ssh -i $DIR/deploy_key -o IdentitiesOnly=yes -o UserKnownHostsFile=$DIR/known_hosts -o StrictHostKeyChecking=yes"
-until git ls-remote "$USHER_REPO" HEAD >/dev/null 2>&1; do
-  echo; echo "Add this as a read-only deploy key on the repo ($USHER_REPO), with write access unticked:"; echo
-  cat "$DIR/deploy_key.pub"; echo
-  read -rp "Press Return once it's added (Ctrl-C to stop) " _
-done
+git ls-remote "$USHER_REPO" HEAD >/dev/null 2>&1 \
+  || { echo "FAIL: can't read $USHER_REPO. Check USHER_REPO in $SITE (an https:// address) and the network."; exit 1; }
 echo "PASS the server can read the repo"
 
 # 2. Code: always exactly what's on stable (main once its tests have passed) -------
