@@ -83,5 +83,16 @@ class SeedJellyfinTests(unittest.TestCase):
         self.assertEqual(state["paths"], ["/Startup/Broken"])
 
 
+class MakeDownloadDirTests(unittest.TestCase):
+    def test_creates_the_folder_transmission_reports(self):
+        settings = {"TRANSMISSION_URL": "http://127.0.0.1:1/rpc", "TR_USER": "u", "TR_PASS": "p"}
+        with (
+            mock.patch.object(upstream_seed.Transmission, "call", return_value={"download-dir": "/data/torrents"}),
+            mock.patch.object(upstream_seed.subprocess, "run") as run,
+        ):
+            upstream_seed.make_download_dir(settings)
+        self.assertEqual(run.call_args.args[0], ["docker", "exec", "transmission", "mkdir", "-p", "/data/torrents"])
+
+
 if __name__ == "__main__":
     unittest.main()

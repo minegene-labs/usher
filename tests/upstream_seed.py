@@ -11,11 +11,14 @@ import base64
 import json
 import os
 import secrets
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+
+from usher.clients import Transmission
 
 JF_HEADER = 'MediaBrowser Client="Usher check", Device="runner", DeviceId="upstream-check", Version="1"'
 
@@ -97,9 +100,16 @@ def seed_jellyfin(base, user, password, env_file):
         f.write(f"JELLYFIN_API_KEY={key}\n")
 
 
+def make_download_dir(env):
+    """A fresh Transmission container may not have made its own download folder yet, and free-space fails on a folder that isn't there."""
+    path = Transmission(env["TRANSMISSION_URL"], env["TR_USER"], env["TR_PASS"]).call("session-get", fields=["download-dir"])["download-dir"]
+    subprocess.run(["docker", "exec", "transmission", "mkdir", "-p", path], check=True, timeout=60)
+
+
 def main():
     env = os.environ
     wait(env["TRANSMISSION_URL"], {"Authorization": "Basic " + base64.b64encode(f"{env['TR_USER']}:{env['TR_PASS']}".encode()).decode()})
+    make_download_dir(env)
     seed_pvr(env["SONARR_URL"], env["SONARR_API_KEY"], "/tv")
     seed_pvr(env["RADARR_URL"], env["RADARR_API_KEY"], "/movies")
     wait(f"{env['PROWLARR_URL']}/api/v1/system/status", {"X-Api-Key": env["PROWLARR_API_KEY"]})
