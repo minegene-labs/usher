@@ -12,3 +12,18 @@
 # id = "CVE-2030-0001"
 # reason = "Only reachable through a function Usher never calls."
 # expires = 2030-12-31
+
+[[accepted]]
+id = "CVE-2025-15367"
+reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and the app runs on a home network with no known way to reach this from Usher."
+expires = 2027-02-18
+
+[[accepted]]
+id = "CVE-2026-103995"
+reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and the app runs on a home network with no known way to reach this from Usher."
+expires = 2027-02-18
+
+[[accepted]]
+id = "CVE-2026-116566"
+reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and the app runs on a home network with no known way to reach this from Usher."
+expires = 2027-02-18

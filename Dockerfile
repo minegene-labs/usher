@@ -2,6 +2,11 @@
 # Base image: Python 3.13. A comment can't follow FROM on the same line: Docker reads it as arguments.
 FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
+# The base image can lag Debian's security fixes for zlib; take the fixed package at build time.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     USHER_WEB=/app/web
