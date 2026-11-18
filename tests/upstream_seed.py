@@ -43,6 +43,34 @@ def wait(url, headers=None, tries=90):
     raise SystemExit(f"{url.split('?')[0]} did not answer in time")
 
 
+def wait_jellyfin(base, tries=90):
+    """Until the first-run setup calls answer: the public info page comes up first, and they answer 503 until Jellyfin has finished starting."""
+    url = f"{base}/Startup/Configuration"
+    for _ in range(tries):
+        try:
+            request(url)
+            return
+        except urllib.error.HTTPError as e:
+            if e.code != 503:
+                raise
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(2)
+    raise SystemExit("Jellyfin's setup calls kept answering 503 or not at all; it never got ready")
+
+
+def setup_call(url, method="GET", body=None, tries=15):
+    """A setup call that may still meet a 503 just after Jellyfin got ready; any other error is a real one."""
+    for _ in range(tries):
+        try:
+            return request(url, method, body)
+        except urllib.error.HTTPError as e:
+            if e.code != 503:
+                raise
+        time.sleep(2)
+    raise SystemExit(f"{url.split('?')[0]} kept answering 503; Jellyfin's setup did not get ready")
+
+
 def seed_pvr(base, key, folder):
     headers = {"X-Api-Key": key}
     wait(f"{base}/api/v3/system/status", headers)
@@ -52,12 +80,13 @@ def seed_pvr(base, key, folder):
 def seed_jellyfin(base, user, password, env_file):
     """First-run wizard, then an API key made the way a person makes one in the Dashboard."""
     wait(f"{base}/System/Info/Public")
+    wait_jellyfin(base)
     auth = {"Authorization": JF_HEADER}
-    request(f"{base}/Startup/Configuration", "POST", {"UICulture": "en-US", "MetadataCountryCode": "US", "PreferredMetadataLanguage": "en"})
-    request(f"{base}/Startup/User")  # the wizard creates the first account here
-    request(f"{base}/Startup/User", "POST", {"Name": user, "Password": password})
-    request(f"{base}/Startup/RemoteAccess", "POST", {"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False})
-    request(f"{base}/Startup/Complete", "POST")
+    setup_call(f"{base}/Startup/Configuration", "POST", {"UICulture": "en-US", "MetadataCountryCode": "US", "PreferredMetadataLanguage": "en"})
+    setup_call(f"{base}/Startup/User")  # the wizard creates the first account here
+    setup_call(f"{base}/Startup/User", "POST", {"Name": user, "Password": password})
+    setup_call(f"{base}/Startup/RemoteAccess", "POST", {"EnableRemoteAccess": True, "EnableAutomaticPortMapping": False})
+    setup_call(f"{base}/Startup/Complete", "POST")
     token = request(f"{base}/Users/AuthenticateByName", "POST", {"Username": user, "Pw": password}, auth)["AccessToken"]
     admin = {"Authorization": f'{JF_HEADER}, Token="{token}"'}
     request(f"{base}/Auth/Keys?app={urllib.parse.quote('Usher check')}", "POST", headers=admin)
