@@ -84,7 +84,6 @@ jobs:
             echo "TRANSMISSION_URL=http://127.0.0.1:9091/transmission/rpc"
             echo "SONARR_API_KEY=$key_a"; echo "RADARR_API_KEY=$key_a"; echo "PROWLARR_API_KEY=$key_b"
             echo "TR_USER=check"; echo "TR_PASS=$tr_pass"; echo "JELLYFIN_USER=Viewer"
-            echo "UPSTREAM_ENV_FILE=$GITHUB_ENV"
           } >> "$GITHUB_ENV"
           ids=(-e "PUID=$(id -u)" -e "PGID=$(id -g)")
           docker run -d --name sonarr -p 127.0.0.1:8989:8989 "${ids[@]}" -e "SONARR__AUTH__APIKEY=$key_a" -v "$RUNNER_TEMP/tv:/tv" "$IMAGE_SONARR"
@@ -93,7 +92,8 @@ jobs:
           docker run -d --name transmission -p 127.0.0.1:9091:9091 "${ids[@]}" -e USER=check -e "PASS=$tr_pass" "$IMAGE_TRANSMISSION"
           docker run -d --name jellyfin -p 127.0.0.1:8096:8096 "$IMAGE_JELLYFIN"
       - name: Seed minimal settings
-        run: python3 -m tests.upstream_seed
+        # Each step has its own environment file, read when that step ends: the key written here reaches the steps after it.
+        run: UPSTREAM_ENV_FILE="$GITHUB_ENV" python3 -m tests.upstream_seed
       - name: Contract tests
         id: contract
         continue-on-error: true

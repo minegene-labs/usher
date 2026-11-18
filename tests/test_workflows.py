@@ -174,6 +174,13 @@ class UpstreamCheckTests(unittest.TestCase):
         self.assertNotIn("${{ inputs.", re.sub(r"(?m)^      \w+: \$\{\{ inputs\.\w+ \}\}$", "", self.text))
         self.assertIn("Not an image name", self.text)
 
+    def test_seeded_jellyfin_key_reaches_the_later_steps(self):
+        # A step's environment file is read when that step ends, so only the seeding step's own file carries the key on.
+        seed = self.text[self.text.index("- name: Seed minimal settings") :]
+        seed = seed[: seed.index("- name:", 1)]
+        self.assertIn('UPSTREAM_ENV_FILE="$GITHUB_ENV" python3 -m tests.upstream_seed', seed)
+        self.assertNotRegex(self.text[: self.text.index("- name: Seed minimal settings")], r"UPSTREAM_ENV_FILE=")
+
     def test_runs_only_the_contract_checks(self):
         self.assertIn("python3 -m tests.upstream_seed", self.text)
         self.assertIn("python3 -m tests.upstream_check", self.text)
