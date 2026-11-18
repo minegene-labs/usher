@@ -5,7 +5,7 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ## [1.1.4]
 
 ### Security
-- The app's image now installs the fixed zlib package when it is built.
+- The server image is rebuilt with the fixed zlib package; update the server to receive it.
 
 ## [1.1.0]
 

@@ -55,9 +55,10 @@ class BaseImageTests(unittest.TestCase):
         self.assertTrue(lines[index - 1].startswith("#"))
         self.assertIn(f"Python {base_minor(self.dockerfile)}", lines[index - 1])
 
-    def test_zlib_is_upgraded_to_the_fixed_package_at_build_time(self):
-        self.assertRegex(self.dockerfile, r"apt-get install[^\n]*--only-upgrade zlib1g")
-        self.assertIn("rm -rf /var/lib/apt/lists/*", self.dockerfile)
+    def test_zlib_is_upgraded_in_the_same_step_as_the_package_list_and_before_the_user(self):
+        step = re.search(r"^RUN apt-get update.*?--only-upgrade zlib1g.*?rm -rf /var/lib/apt/lists/\*$", self.dockerfile, re.M | re.S)
+        self.assertIsNotNone(step)
+        self.assertLess(step.start(), self.dockerfile.index("\nUSER "))
 
     def test_no_instruction_ends_with_a_comment(self):
         self.assertEqual(trailing_comments(self.dockerfile), [])
