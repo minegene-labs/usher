@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.0]
+
+### Added
+- After the first account is made, the Setup page now has a step to connect your apps: Jellyfin, Sonarr, Radarr, Prowlarr, Transmission and, if you like, TMDb. Usher suggests addresses where it finds them on their usual ports, each app says where to find its key, and **Test** reads the app's version and shows whether it is supported, works but hasn't been tested yet, or is too old. Only apps that connected are saved, and a saved key is never shown again. You can skip the step; Usher uses what you save after it next restarts.
+
 ## [1.3.0]
 
 ### Added

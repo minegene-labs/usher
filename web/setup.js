@@ -1,4 +1,5 @@
-// Usher — the setup page: the one-time code from Usher's log, and the first account, who becomes the admin.
+// Usher — the setup page: the one-time code from Usher's log, and the first account, who becomes the admin. Connecting
+// the apps follows (connect.js).
 import { api, lists } from "./data.js";
 import { h } from "./dom.js";
 
@@ -25,7 +26,7 @@ export const Setup = (Base) => class extends Base {
         btn.disabled = true; error.textContent = "";
         try {
           lists.set("me", await api("/api/setup", { method: "POST", body: { code: code.value.trim(), name: name.value.trim(), username: user.value.trim(), password: pass.value } }));
-          this.start();
+          await this.connectApps();
         } catch (err) {
           error.textContent = err.message;
           btn.disabled = false;

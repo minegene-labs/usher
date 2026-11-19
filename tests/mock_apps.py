@@ -939,6 +939,8 @@ class TmdbHandler(Base):
         if self.headers.get("Authorization") != "Bearer tmdb-test-token":
             return self.reply({"status_message": "Invalid API key"}, 401)
         u = urlsplit(self.path)
+        if u.path == "/authentication":
+            return self.reply({"success": True})
         q = parse_qs(u.query)
 
         def tv(i, name, y):

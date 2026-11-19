@@ -19,6 +19,7 @@ from . import __version__, artwork, config
 from .auth import COOKIE, Auth
 from .actions import Actions, Problem
 from .auth_routes import AuthRoutes, describe_device
+from .connect_routes import ConnectRoutes
 from .diagnostics import RING, Diagnostics
 from .discover import Discover
 from .notify import Notifier
@@ -81,7 +82,7 @@ class App:
         self.origin_host = urlsplit(settings.public_origin).netloc
 
 
-class Handler(AuthRoutes, SetupRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPRequestHandler):
+class Handler(AuthRoutes, SetupRoutes, ConnectRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPRequestHandler):
     server_version = "Usher"
     sys_version = ""
     protocol_version = "HTTP/1.1"
@@ -191,6 +192,8 @@ class Handler(AuthRoutes, SetupRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes
                 return self.me(s)
             if path == "/api/settings":
                 return self.settings_get(s)
+            if path == "/api/connect":
+                return self.connect_get(s)
             if path == "/api/state":
                 return self.send(200, self.app.state.snapshot)
             if path == "/api/events":
@@ -288,6 +291,8 @@ class Handler(AuthRoutes, SetupRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes
             return self.sign_out_others(s)
         if path == "/api/settings":
             return self.settings_save(s, data)
+        if path == "/api/connect/test":
+            return self.connect_test(s, data)
         if path == "/api/refresh":
             self.app.state.refresh_now()
             return self.send(200, {"ok": True})

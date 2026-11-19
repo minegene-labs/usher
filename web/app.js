@@ -15,9 +15,10 @@ import { Search } from "./search.js";
 import { Discover } from "./discover.js";
 import { Account } from "./account.js";
 import { Setup } from "./setup.js";
+import { Connect } from "./connect.js";
 import { Changelog } from "./changelog.js";
 
-const screens = [Shell, Home, Downloads, UpcomingLibrary, Status, Settings, Notify, Advanced, Updates, Sheets, Search, Discover, Account, Setup, Changelog];
+const screens = [Shell, Home, Downloads, UpcomingLibrary, Status, Settings, Notify, Advanced, Updates, Sheets, Search, Discover, Account, Setup, Connect, Changelog];
 const UsherApp = screens.reduce((Base, addScreen) => addScreen(Base), HTMLElement);
 
 customElements.define("usher-app", UsherApp);

@@ -32,13 +32,14 @@ globalThis.fetch = async (path, init = {}) => {
 };
 const { Setup } = await import("%(setup)s");
 const { Account } = await import("%(account)s");
+const { Connect } = await import("%(connect)s");
 const { lists, store } = await import("%(data)s");
 const words = (n) => (n.text ?? "") + (n.kids || []).map(words).join(" ");
 const walk = (n, f) => { if (!n || typeof n !== "object") return; f(n); (n.kids || []).forEach(k => walk(k, f)); };
 const find = (n, test) => { let hit = null; walk(n, (x) => { if (!hit && test(x)) hit = x; }); return hit; };
 const input = (app, name) => find(app, (x) => x.tag === "input" && x.attrs?.name === name);
 class Base extends El { constructor() { super("usher-app"); this.started = 0; } start() { this.started++; } }
-const make = () => new (Setup(Account(Base)))();
+const make = () => new (Setup(Connect(Account(Base))))();
 const out = {};
 %(steps)s
 console.log(JSON.stringify(out));
@@ -46,7 +47,7 @@ console.log(JSON.stringify(out));
 
 
 def run(steps):
-    code = HARNESS % {"setup": (WEB / "setup.js").as_uri(), "account": (WEB / "account.js").as_uri(), "data": (WEB / "data.js").as_uri(), "steps": steps}
+    code = HARNESS % {"setup": (WEB / "setup.js").as_uri(), "account": (WEB / "account.js").as_uri(), "connect": (WEB / "connect.js").as_uri(), "data": (WEB / "data.js").as_uri(), "steps": steps}
     done = subprocess.run(["node", "--input-type=module", "-e", code], capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
 

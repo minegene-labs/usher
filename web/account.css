@@ -20,3 +20,17 @@
 .banner.offline a.link { color: var(--accent-text); font-weight: 600; }
 .fields input.code { text-transform: uppercase; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
 .signin .error { color: var(--red); font-size: 0.9375rem; min-height: 1.3em; }
+/* ---- connect your apps (setup) ---- */
+.signin.connect { place-items: start center; }
+.connect-page { width: min(440px, 100%); display: grid; gap: 14px; text-align: center; padding-bottom: env(safe-area-inset-bottom); }
+.connect-app { display: grid; gap: 8px; text-align: left; }
+.connect-app h2 { font-size: 1.0625rem; font-weight: 600; }
+.connect-app h2 span { color: var(--label-2); font-weight: 400; }
+.connect-find { font-size: 0.9375rem; }
+.connect-test { display: flex; align-items: center; gap: 12px; }
+.connect-test .connect-result { text-align: left; }
+.signin .connect-result { font-size: 0.9375rem; min-height: 1.3em; }
+.signin .connect-result.supported { color: var(--green); }
+.signin .connect-result.untested { color: var(--orange); }
+.signin .connect-result.problem { color: var(--red); }
+.connect-actions { display: grid; gap: 10px; }
