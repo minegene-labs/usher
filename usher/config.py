@@ -3,10 +3,11 @@
 Every choice Usher makes on the operator's behalf is a key in KEYS below, with its default. The file is read from
 USHER_CONFIG (default /config/usher.toml) with Python's built-in tomllib, and it is the only place for settings: without
 it Usher doesn't start, so an upgrade that lost the file rolls back (the log names the file).
-Secrets (API keys, passwords, the TMDb token, Web Push keys) never go in it: they stay in the environment (.env) or in the
-integrations' own config files, mounted read-only.
+Secrets (API keys, passwords, the TMDb token, Web Push keys) never go in it: they stay in the environment (.env), in
+the integrations' own config files (mounted read-only) or, when they are entered in the app, in secrets.json beside it.
 """
 
+import json
 import logging
 import os
 import re
@@ -283,15 +284,48 @@ def get(name: str):
     return list(value) if key.kind is list else value
 
 
+# secrets ---------------------------------------------------------------------------------------------------
+# The environment names of every secret Usher uses. One entered in the app is kept in secrets.json beside usher.toml
+# (see saved_settings.py); the environment wins, so an operator's own value is never silently replaced.
+SECRETS = ("JELLYFIN_API_KEY", "SONARR_API_KEY", "RADARR_API_KEY", "PROWLARR_API_KEY", "TR_PASS", "TMDB_TOKEN")
+SECRETS_FILE = "secrets.json"
+
+
+def secrets_path() -> Path:
+    return Path(config_path()).with_name(SECRETS_FILE)
+
+
+def read_secrets() -> dict:
+    """The secrets entered in the app: {environment name: value}; empty when there is no file."""
+    path = secrets_path()
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return {}
+    except (OSError, ValueError) as e:  # the message names the file, never its content
+        raise ConfigError(f"Can't read {path}: {type(e).__name__}") from None
+    if not isinstance(data, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in data.items()):
+        raise ConfigError(f"{path} must hold one text value for each secret")
+    return data
+
+
+def secret(name: str) -> str:
+    """A secret's value: from the environment, else the one entered in the app, else empty."""
+    return _env(name) or read_secrets().get(name, "").strip()
+
+
 # start-up --------------------------------------------------------------------------------------------------
 def missing_file(source: Source) -> str:
     """What to say when there is no usher.toml: nothing is set up for this install."""
     return f"No {source.path}: Usher can't start without it. Copy {EXAMPLE} there and fill it in."
 
 
-def check(source: Source, strict: bool = True) -> list:
+def check(source: Source, strict: bool = True, setting_up: bool = False) -> list:
     """Validate everything for start-up and return warnings for the log and /healthz. Raises ConfigError when the
-    server shouldn't start."""
+    server shouldn't start. While an install is still being set up in the browser there may be no usher.toml and no
+    viewing account yet, and that is no problem."""
+    if setting_up:
+        return []
     if source.values is None:
         if strict:
             raise ConfigError(missing_file(source))
@@ -343,11 +377,11 @@ class Settings:
     config_notes: tuple = ()  # warnings from reading the settings, shown in the log and /healthz
 
 
-def load(path: str | None = None, strict: bool = True) -> Settings:
+def load(path: str | None = None, strict: bool = True, setting_up: bool = False) -> Settings:
     """Read and check the settings, make them the active ones, and log any warnings. Raises ConfigError."""
     source = read(path)
     activate(source)
-    notes = check(source, strict)
+    notes = check(source, strict, setting_up)
     for n in notes:
         log.warning("%s", n)
     host, _, port = get("server.bind").rpartition(":")
@@ -363,12 +397,12 @@ def load(path: str | None = None, strict: bool = True) -> Settings:
         prowlarr_url=get("indexer_manager.url").rstrip("/"),
         transmission_url=get("download_client.url"),
         jellyfin_url=get("media_server.url").rstrip("/"),
-        sonarr_key=_env("SONARR_API_KEY") or _api_key_from_xml(f"{keys}/sonarr.xml"),
-        radarr_key=_env("RADARR_API_KEY") or _api_key_from_xml(f"{keys}/radarr.xml"),
-        prowlarr_key=_env("PROWLARR_API_KEY") or _api_key_from_xml(f"{keys}/prowlarr.xml"),
+        sonarr_key=secret("SONARR_API_KEY") or _api_key_from_xml(f"{keys}/sonarr.xml"),
+        radarr_key=secret("RADARR_API_KEY") or _api_key_from_xml(f"{keys}/radarr.xml"),
+        prowlarr_key=secret("PROWLARR_API_KEY") or _api_key_from_xml(f"{keys}/prowlarr.xml"),
         transmission_user=get("download_client.user"),
-        transmission_pass=_env("TR_PASS"),
-        jellyfin_key=_env("JELLYFIN_API_KEY"),
+        transmission_pass=secret("TR_PASS"),
+        jellyfin_key=secret("JELLYFIN_API_KEY"),
         jellyfin_user_id=get("media_server.user_id"),
         media_path=get("library.media_path"),
         recycle_dir=get("library.recycle_dir"),

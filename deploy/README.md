@@ -122,7 +122,7 @@ Everyone else can run Usher without building it. Each release publishes a contai
    docker compose run --rm --no-deps -T --entrypoint sh usher -c 'cat > /data/usher.toml' < usher.toml
    ```
 4. `docker compose run --rm --no-deps usher python -m usher.cli ids` lists the Jellyfin accounts and the Sonarr and Radarr quality profiles by ID. Set `media_server.user_id` (required) and the two `quality_profile_id` keys in `usher.toml`, and copy it into the volume again.
-5. `docker compose up -d --wait`, then add the first account: `docker compose exec usher python -m usher.cli add <name>` asks for a password. This is what `usher-user add` does on the install above. Open your address and sign in.
+5. `docker compose up -d --wait`, then add the first account. With no account yet Usher prints a setup code (`docker compose logs usher`); open your address, enter the code and create the account on the Setup page. It becomes the admin, who can save settings and secrets in the app from then on. Or: `docker compose exec usher python -m usher.cli add <name>` asks for a password, as `usher-user add` does on the install above. Then sign in.
 6. To update, `docker compose pull && docker compose up -d`. The data volume keeps accounts and requests.
 
 To check where an image came from, `gh attestation verify oci://ghcr.io/minegene-labs/usher:<version> --repo minegene-labs/usher` verifies its provenance.

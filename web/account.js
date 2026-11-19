@@ -52,6 +52,7 @@ export const Account = (Base) => class extends Base {
     h("div", { class: "fields" }, user, pass), error, btn);
     this.replaceChildren(h("main", { class: "signin" }, form));
     user.focus();
+    this.checkSetup();   // a server with no account yet swaps this for the setup page
   }
 
   // Shown when Usher opens but can't reach the server: almost always Tailscale being off away from home.

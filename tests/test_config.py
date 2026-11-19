@@ -274,12 +274,22 @@ class StartUpTests(ConfigCase):
     """/healthz answers HTTP 200 whatever its body says, so a server that starts without its settings would look
     healthy to the update script. Not starting at all is what makes the container unhealthy and rolls the update back."""
 
+    def setUp(self):
+        super().setUp()
+        self.data = Path(self.tmp.name) / "data"
+        self.accounts = 1  # an install that has been in use: setup mode, for one that has none, is in test_setup.py
+
     def start(self):
         """Run server.main() with the network and the app faked; the exit code (None if it got as far as listening)."""
         from usher import server
+        from usher.store import Store
 
+        store = Store(self.data)
+        for n in range(self.accounts):
+            store.add_user(f"person{n}", "Person", "x")
         self.error = mock.MagicMock()
         with (
+            mock.patch.object(server, "Store", return_value=store),
             mock.patch.object(server, "logging"),
             mock.patch.object(server.log, "error", self.error),
             mock.patch.object(server, "Server") as self.listen,

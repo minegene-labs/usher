@@ -12,6 +12,7 @@ import time
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from . import __version__, artwork, config
@@ -24,6 +25,8 @@ from .notify import Notifier
 from .notify_routes import NotifyRoutes
 from .opinion_routes import OpinionRoutes
 from .replace import Replacer
+from .setup import Setup, is_setting_up
+from .setup_routes import SetupRoutes
 from .push import endpoint_ok
 from .clients import ApiError, Arr, Jellyfin, Transmission, jellyfin_device_id, cut_off_note
 from .state import State
@@ -55,9 +58,10 @@ MAX_BODY = 8 * 1024
 
 
 class App:
-    def __init__(self, settings):
+    def __init__(self, settings, store=None):
         self.s = settings
-        self.store = Store(settings.data_dir)
+        self.store = store or Store(settings.data_dir)
+        self.setup = Setup(self.store)
         self.auth = Auth(self.store, settings.session_days)
         self.sonarr = Arr("sonarr", settings.sonarr_url, settings.sonarr_key)
         self.radarr = Arr("radarr", settings.radarr_url, settings.radarr_key)
@@ -77,7 +81,7 @@ class App:
         self.origin_host = urlsplit(settings.public_origin).netloc
 
 
-class Handler(AuthRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPRequestHandler):
+class Handler(AuthRoutes, SetupRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPRequestHandler):
     server_version = "Usher"
     sys_version = ""
     protocol_version = "HTTP/1.1"
@@ -133,7 +137,11 @@ class Handler(AuthRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPReq
         return host == self.app.origin_host or host.startswith(("127.0.0.1", "localhost"))
 
     def same_origin(self) -> bool:
-        return self.headers.get("Origin", "") == self.app.s.public_origin
+        origin = self.headers.get("Origin", "")
+        if self.app.s.public_origin:
+            return origin == self.app.s.public_origin
+        host = self.headers.get("Host", "")  # no server.origin yet, as while setting up: the page's own address
+        return bool(host) and urlsplit(origin).netloc == host
 
     def body_json(self):
         try:
@@ -173,12 +181,16 @@ class Handler(AuthRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPReq
             return self.send(200, body)
         if not path.startswith("/api/"):
             return self.static(path)
+        if path == "/api/setup":
+            return self.setup_open()
         s = self.session()
         if not s:
             return self.err(HTTPStatus.UNAUTHORIZED, "Sign in to continue")
         try:
             if path == "/api/me":
                 return self.me(s)
+            if path == "/api/settings":
+                return self.settings_get(s)
             if path == "/api/state":
                 return self.send(200, self.app.state.snapshot)
             if path == "/api/events":
@@ -257,6 +269,8 @@ class Handler(AuthRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPReq
         path = urlsplit(self.path).path
         if path == "/internal/update-result":  # the update script on this server: no sign-in or origin
             return self.update_report(self.body_json() or {})
+        if path == "/api/setup":  # the setup code stands in for a sign-in; setup_create checks the origin itself
+            return self.setup_create(self.body_json() or {})
         if not self.same_origin():
             log.warning("POST %s refused: origin %r", self.path, self.headers.get("Origin"))
             return self.err(HTTPStatus.FORBIDDEN, "Request refused")
@@ -272,6 +286,8 @@ class Handler(AuthRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes, BaseHTTPReq
             return self.logout(s)
         if path == "/api/sessions/sign-out-others":
             return self.sign_out_others(s)
+        if path == "/api/settings":
+            return self.settings_save(s, data)
         if path == "/api/refresh":
             self.app.state.refresh_now()
             return self.send(200, {"ok": True})
@@ -428,11 +444,15 @@ def main():
     logging.basicConfig(level=logging.INFO, stream=sys.stdout, format="%(levelname)s %(name)s: %(message)s")
     logging.getLogger().addHandler(RING)
     try:
-        settings = config.load()
+        source = config.read()
+        config.activate(source)
+        store = Store(Path(config.get("server.data_dir")))
+        settings = config.load(setting_up=is_setting_up(store, source))
     except config.ConfigError as e:
         log.error("Usher can't start: %s", e)
         sys.exit(2)
-    app = App(settings)
+    app = App(settings, store)
+    app.setup.begin()
     missing = [
         n
         for n, v in (

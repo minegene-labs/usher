@@ -32,7 +32,7 @@ ITEM_TTL = 24 * 3600
 
 class Discover(Picks, DiscoverRows):
     def __init__(self, actions, state, data_dir=None):
-        self.token = os.environ.get("TMDB_TOKEN", "").strip()
+        self.token = config.secret("TMDB_TOKEN")
         self.old_key = bool(re.fullmatch(r"[0-9a-f]{32}", self.token))
         self._asked_for_token = False
         self.region = config.get("discover.region").upper()

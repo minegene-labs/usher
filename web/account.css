@@ -18,4 +18,5 @@
 .away-help ol { margin: 12px 0 8px 20px; display: grid; gap: 6px; }
 .away-help strong { color: var(--label); font-weight: 600; word-break: break-all; }
 .banner.offline a.link { color: var(--accent-text); font-weight: 600; }
+.fields input.code { text-transform: uppercase; letter-spacing: 0.08em; font-variant-numeric: tabular-nums; }
 .signin .error { color: var(--red); font-size: 0.9375rem; min-height: 1.3em; }

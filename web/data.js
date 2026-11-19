@@ -16,7 +16,7 @@ export async function api(path, { method = "GET", body, timeout } = {}) {
   const signal = timeout && AbortSignal.timeout ? AbortSignal.timeout(timeout) : undefined;
   const res = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined, credentials: "same-origin", cache: "no-store", signal });
   const data = await res.json().catch(() => ({}));
-  if (res.status === 401 && path !== "/api/login") throw new SignedOut();
+  if (res.status === 401 && path !== "/api/login" && path !== "/api/setup") throw new SignedOut();   // those two answer 401 for a wrong password or code
   if (!res.ok) throw new Error(data.error || "Something went wrong. Try again.");
   return data;
 }

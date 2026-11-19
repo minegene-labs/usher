@@ -109,7 +109,7 @@ class Store:
         """Columns added after the first release. Each is added once, if missing."""
         added = {
             "requests": [("hidden", "INTEGER NOT NULL DEFAULT 0"), ("searched", "INTEGER")],
-            "users": [("home_seen", "INTEGER NOT NULL DEFAULT 0")],
+            "users": [("home_seen", "INTEGER NOT NULL DEFAULT 0"), ("admin", "INTEGER NOT NULL DEFAULT 0")],
         }
         for table, cols in added.items():
             have = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})")}
@@ -139,6 +139,21 @@ class Store:
     def add_user(self, username: str, display: str, pw_hash: str):
         self.run("INSERT INTO users (username, display, pw, created) VALUES (?, ?, ?, ?)", (username, display, pw_hash, int(time.time())))
 
+    def add_first_user(self, username: str, display: str, pw_hash: str) -> bool:
+        """The first account, who is the admin. False when an account exists by now, so two setups can't both win."""
+        with self._lock:
+            cur = self._db.execute(
+                "INSERT INTO users (username, display, pw, created, admin) SELECT ?, ?, ?, ?, 1 WHERE NOT EXISTS (SELECT 1 FROM users)",
+                (username, display, pw_hash, int(time.time())),
+            )
+            return cur.rowcount == 1
+
+    def user_count(self) -> int:
+        return self.one("SELECT COUNT(*) FROM users")[0]
+
+    def has_admin(self) -> bool:
+        return self.one("SELECT 1 FROM users WHERE admin = 1") is not None
+
     def set_password(self, username: str, pw_hash: str) -> bool:
         return self.run("UPDATE users SET pw = ?, failures = 0, locked_until = 0 WHERE username = ?", (pw_hash, username)) == 1
 
@@ -161,7 +176,7 @@ class Store:
 
     def session(self, id_hash: str):
         return self.one(
-            "SELECT s.*, u.username, u.display, u.home_seen FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id_hash = ? AND s.expires > ?",
+            "SELECT s.*, u.username, u.display, u.home_seen, u.admin FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id_hash = ? AND s.expires > ?",
             (id_hash, int(time.time())),
         )
 

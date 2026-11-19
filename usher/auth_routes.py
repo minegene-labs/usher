@@ -38,6 +38,7 @@ class AuthRoutes:
         ]
         return {
             "account": s["user_id"],
+            "admin": bool(s["admin"]),
             "username": s["username"],
             "name": s["display"],
             "csrf": s["csrf"],
