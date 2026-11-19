@@ -134,7 +134,7 @@ class Handler(AuthRoutes, SetupRoutes, NotifyRoutes, OpinionRoutes, UpdateRoutes
 
     def host_ok(self) -> bool:
         host = self.headers.get("Host", "")
-        return host == self.app.origin_host or host.startswith(("127.0.0.1", "localhost"))
+        return host == self.app.origin_host or host.rpartition(":")[0] in ("127.0.0.1", "localhost") or host in ("127.0.0.1", "localhost")
 
     def same_origin(self) -> bool:
         origin = self.headers.get("Origin", "")

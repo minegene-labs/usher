@@ -66,16 +66,21 @@ class CodeTests(Case):
         self.assertEqual(self.setup.check("AAAA-AAAA-AAAA"), "wrong")
         self.assertEqual(self.setup.check(""), "wrong")
 
-    def test_five_wrong_codes_make_a_new_one(self):
-        old = self.start()
+    def test_five_wrong_codes_pause_every_try_for_a_minute_and_keep_the_code(self):
+        code = self.start()
         for _ in range(MAX_WRONG - 1):
             self.assertEqual(self.setup.check("AAAA-AAAA-AAAA"), "wrong")
-        with self.assertLogs("usher.setup", "WARNING") as logs:
-            self.assertEqual(self.setup.check("AAAA-AAAA-AAAA"), "renewed")
-        new = next(line for line in logs.output if "Setup code:" in line).split("Setup code: ")[1].split()[0]
-        self.assertNotEqual(old, new)
-        self.assertEqual(self.setup.check(old), "wrong")
-        self.assertEqual(self.setup.check(new), "ok")
+        self.assertEqual(self.setup.check("AAAA-AAAA-AAAA"), "paused")
+        self.assertEqual(self.setup.check(code), "paused")  # even the right one waits
+        self.assertFalse(self.setup.finish(code, "sam", "Sam", "x"))
+        with mock.patch.object(setup.time, "monotonic", return_value=setup.time.monotonic() + setup.PAUSE + 1):
+            self.assertEqual(self.setup.check(code), "ok")  # the owner's copied code is still good
+
+    def test_an_account_added_another_way_closes_setup(self):
+        self.start()
+        self.store.add_user("sam", "Sam", "x")  # usher-user add
+        self.assertFalse(self.setup.open)
+        self.assertEqual(self.setup.check("AAAA-AAAA-AAAA"), "closed")
 
     def test_no_code_and_no_setup_when_an_account_exists(self):
         self.store.add_user("sam", "Sam", hash_password(PASSWORD))
@@ -141,6 +146,25 @@ class CodeTests(Case):
 
 
 class StartUpModeTests(Case):
+    def test_a_fresh_install_with_no_file_starts_in_setup_mode_and_prints_a_code(self):
+        from usher import server
+
+        with (
+            mock.patch.object(server, "Store", return_value=self.store),
+            mock.patch.object(server, "logging"),
+            mock.patch.object(server, "Server") as listen,
+            mock.patch.object(server, "App") as app,
+            mock.patch.object(server, "signal"),
+            self.assertLogs("usher.setup", "WARNING") as logs,
+        ):
+            app.return_value.setup = Setup(self.store)
+            listen.return_value.serve_forever.side_effect = KeyboardInterrupt
+            with self.assertRaises(KeyboardInterrupt):
+                server.main()
+        self.assertIn("Setup code: ", logs.output[0])
+        self.assertTrue(app.return_value.setup.open)
+        listen.assert_called_once()
+
     def test_a_fresh_install_is_setting_up_with_or_without_a_file(self):
         self.assertTrue(setup.is_setting_up(self.store, config.read()))
         self.toml.write_text('[media_server]\nuser_id = "abc"\n')
@@ -245,6 +269,15 @@ class SetupPageTests(WebCase):
         self.assertEqual(status, 401)
         self.assertEqual(self.store.user_count(), 0)
 
+    def test_only_the_exact_local_names_pass_the_host_check(self):
+        for host, ok in (("127.0.0.1:8484", True), ("localhost", True), ("localhost.evil.example", False), ("127.0.0.1.evil.example:80", False)):
+            req = urllib.request.Request(self.base + "/api/setup", headers={"Host": host})
+            try:
+                status = urllib.request.urlopen(req, timeout=10).status
+            except urllib.error.HTTPError as e:
+                status = e.code
+            self.assertEqual(status == 200, ok, host)
+
     def test_a_request_from_another_site_is_refused(self):
         status, _, _ = self.call("/api/setup", {"code": self.code, "username": "sam", "password": PASSWORD}, origin="https://elsewhere.example")
         self.assertEqual(status, 403)
@@ -265,11 +298,18 @@ class SetupPageTests(WebCase):
         self.assertEqual((status, me["username"], me["name"], me["admin"]), (200, "sam", "Sam", True))
         self.assertTrue(self.auth.session(token))
 
-    def test_the_code_is_not_kept_with_the_account_or_in_the_answer(self):
-        _, body, headers = self.create()
-        self.assertNotIn(self.code, json.dumps(body))
-        self.assertNotIn(PASSWORD, json.dumps(body))
-        self.assertNotIn(PASSWORD, str(headers))
+    def test_the_password_is_never_in_the_answer_or_the_log(self):
+        with self.assertLogs(level="DEBUG") as logs:
+            _, body, headers = self.create()
+        self.assertNotIn(PASSWORD, json.dumps(body) + str(headers) + "\n".join(logs.output))
+        self.assertNotIn(PASSWORD, self.store.user_by_name("sam")["pw"])  # only its hash is kept
+
+    def test_the_account_is_made_even_when_the_sign_in_limit_is_reached(self):
+        for _ in range(30):
+            self.auth._ip_fail("127.0.0.1")
+        status, body, headers = self.create()
+        self.assertEqual(status, 200)
+        self.assertIn("Set-Cookie", headers)
 
     def test_after_the_first_account_the_setup_page_is_gone_for_good(self):
         self.sign_up()
@@ -278,14 +318,16 @@ class SetupPageTests(WebCase):
         self.assertEqual(self.create(code="AAAA-AAAA-AAAA", username="alex")[0], 404)
         self.assertEqual(self.store.user_count(), 1)
 
-    def test_too_many_wrong_codes_ask_for_the_new_one_in_the_log(self):
+    def test_too_many_wrong_codes_pause_setup_without_changing_the_code(self):
         for _ in range(MAX_WRONG - 1):
             self.create(code="AAAA-AAAA-AAAA")
-        with self.assertLogs("usher.setup", "WARNING"):
-            status, body, _ = self.create(code="AAAA-AAAA-AAAA")
-        self.assertEqual(status, 401)
-        self.assertIn("new one", body["error"])
-        self.assertEqual(self.create()[0], 401)  # the first code no longer works
+        status, body, _ = self.create(code="AAAA-AAAA-AAAA")
+        self.assertEqual(status, 429)
+        self.assertIn("minute", body["error"])
+        self.assertEqual(self.create()[0], 429)
+        self.assertEqual(self.store.user_count(), 0)
+        with mock.patch.object(setup.time, "monotonic", return_value=setup.time.monotonic() + setup.PAUSE + 1):
+            self.assertEqual(self.create()[0], 200)
 
     def test_with_no_server_origin_set_yet_the_address_in_use_counts(self):
         # signing in works from the page's own address; it didn't before, so nobody could sign in until origin was set
@@ -358,6 +400,37 @@ class SettingsTests(WebCase):
         body = self.call("/api/settings", cookie=self.token)[1]
         self.assertNotIn("server.bind", body["settings"])
         self.assertEqual(body["locked"], ["server.bind", "server.data_dir"])
+
+    def test_a_setting_name_cannot_write_other_keys_into_the_file(self):
+        evil = 'server]\nbind = "0.0.0.0:1"\ndata_dir = "/elsewhere"\n[storage.low_space_gb'
+        before = self.toml.read_text()
+        self.assertEqual(self.save({"settings": {evil: 5}})[0], 400)
+        self.assertEqual(self.toml.read_text(), before)
+        self.assertEqual(config.read().values, {})
+
+    def test_a_character_that_cannot_be_saved_is_refused(self):
+        self.assertEqual(self.save({"settings": {"library.tv_folder": "\ud800"}})[0], 400)
+        self.assertEqual(self.save({"secrets": {"SONARR_API_KEY": "\ud800"}})[0], 400)
+
+    def test_the_operators_own_file_is_kept_once_before_usher_rewrites_it(self):
+        own = '# my notes\n[media_server]\nuser_id = "abc"  # the viewer\n'
+        self.toml.write_text(own)
+        self.save({"settings": {"discover.region": "NZ"}})
+        self.save({"settings": {"discover.region": "AU"}})
+        backup = self.dir / saved_settings.BACKUP
+        self.assertEqual(backup.read_text(), own)
+        self.assertEqual(stat.S_IMODE(backup.stat().st_mode), 0o600)
+        self.assertEqual(config.read().values, {"media_server.user_id": "abc", "discover.region": "AU"})
+
+    def test_two_saves_at_once_keep_both(self):
+        names = ["discover.region", "discover.language", "storage.low_space_gb", "downloads.max_parallel"]
+        values = ["NZ", "en-NZ", 7, 1]
+        threads = [threading.Thread(target=self.save, args=({"settings": {n: v}},)) for n, v in zip(names, values)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        self.assertEqual(config.read().values, dict(zip(names, values)))
 
     def test_text_that_needs_escaping_survives(self):
         self.save({"settings": {"library.tv_folder": '/srv/My "Shows"\\ü'}})

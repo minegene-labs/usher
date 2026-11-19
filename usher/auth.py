@@ -94,11 +94,15 @@ class Auth:
             log.warning("sign-in failed for %r from %s", username[:40], ip)
             return None, "That username or password isn't right."
         self.store.run("UPDATE users SET failures = 0, locked_until = 0 WHERE id = ?", (user["id"],))
+        return self.open_session(user, ip, device), None
+
+    def open_session(self, user, ip: str, device: str) -> str:
+        """A new session for a person already known to be who they say (a good password, or the setup code); its token."""
         token = secrets.token_urlsafe(32)  # 256 bits
         self.store.add_session(token_hash(token), user["id"], secrets.token_urlsafe(24), device, self.days)
         self.store.purge_expired()
         log.info("signed in: %s from %s (%s)", user["username"], ip, device[:60])
-        return token, None
+        return token
 
     def session(self, token: str):
         if not token or len(token) > 100:

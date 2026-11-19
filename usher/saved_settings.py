@@ -8,6 +8,7 @@ four characters. A change takes effect at the next start.
 import json
 import logging
 import re
+import threading
 from pathlib import Path
 
 from . import config
@@ -20,6 +21,8 @@ HEADER = "# Settings saved by Usher. Every key is described in docs/configuratio
 # wrong value would lock everyone out or start Usher with an empty set of accounts.
 LOCKED = ("server.bind", "server.data_dir")
 MAX_SECRET = 256
+BACKUP = "usher.toml.before-usher"  # the operator's own file, kept once before Usher first rewrites it
+_save_lock = threading.Lock()
 USERINFO = re.compile(r"(://)[^/@\s]*@")
 
 
@@ -45,8 +48,20 @@ def ensure_file():
     write_private(path, HEADER)
 
 
+def keep_original():
+    """Usher rewrites usher.toml from the keys it holds, which drops comments: keep the operator's own file once."""
+    path = Path(config.config_path())
+    backup = path.with_name(BACKUP)
+    try:
+        text = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return
+    if not text.startswith(HEADER) and not backup.exists():
+        write_private(backup, text)
+
+
 def _clean_secret(name, value):
-    if not isinstance(value, str) or len(value) > MAX_SECRET or any(ord(c) < 32 or ord(c) == 127 for c in value):
+    if not isinstance(value, str) or len(value) > MAX_SECRET or any(ord(c) < 32 or ord(c) == 127 or 0xD800 <= ord(c) <= 0xDFFF for c in value):
         raise config.ConfigError(f"{name} must be text on one line, at most {MAX_SECRET} characters")
     return value.strip()
 
@@ -57,9 +72,16 @@ def save(settings: dict, secrets: dict) -> list:
     for name in settings:
         if name in LOCKED:
             raise config.ConfigError(f"{name} can only be changed in usher.toml on the server")
+        if name not in config.KEYS:  # before any text is built from it: a name is written into the file as it is
+            raise config.ConfigError(f"{str(name)[:60]!r} is not a setting Usher knows")
     for name in secrets:
         if name not in config.SECRETS:
             raise config.ConfigError(f"{name} is not a secret Usher knows")
+    with _save_lock:
+        return _save(settings, secrets)
+
+
+def _save(settings, secrets):
     current = config.read().values or {}
     merged = {**current, **{k: v for k, v in settings.items() if v is not None}}
     for name, v in settings.items():
@@ -74,7 +96,12 @@ def save(settings: dict, secrets: dict) -> list:
             kept[name] = value
         else:
             kept.pop(name, None)
+    try:
+        text.encode("utf-8")  # a lone surrogate sent as JSON can't be written: refuse it rather than fail half way
+    except UnicodeEncodeError:
+        raise config.ConfigError("A setting holds a character that can't be saved") from None
     if settings:
+        keep_original()
         write_private(config.config_path(), text)
     if secrets:
         write_private(config.secrets_path(), json.dumps(kept, indent=2) + "\n")

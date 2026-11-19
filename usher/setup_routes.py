@@ -31,8 +31,8 @@ class SetupRoutes:
         verdict = self.app.setup.check(code)
         if verdict == "closed":
             return self.err(HTTPStatus.NOT_FOUND, "Not found")
-        if verdict == "renewed":
-            return self.err(HTTPStatus.UNAUTHORIZED, "Too many wrong codes. Usher has made a new one in its log.")
+        if verdict == "paused":
+            return self.err(HTTPStatus.TOO_MANY_REQUESTS, "Too many wrong codes. Wait a minute, then try again.")
         if verdict != "ok":
             return self.err(HTTPStatus.UNAUTHORIZED, "That setup code isn't right. It is in Usher's log.")
         username = str(data.get("username", "")).strip().lower()
@@ -49,19 +49,18 @@ class SetupRoutes:
             return self.err(HTTPStatus.INTERNAL_SERVER_ERROR, "Usher can't write to its data folder, so it can't be set up. Its log says more.")
         if not done:
             return self.err(HTTPStatus.NOT_FOUND, "Not found")
-        token, problem = self.app.auth.sign_in(username, password, self.client_ip(), self.headers.get("User-Agent", ""))
-        if not token:
-            return self.err(HTTPStatus.INTERNAL_SERVER_ERROR, problem)
+        token = self.app.auth.open_session(self.app.store.user_by_name(username), self.client_ip(), self.headers.get("User-Agent", ""))
         s = self.app.store.session(token_hash(token))
         return self.send(200, self._me_body(s), headers={"Set-Cookie": self.app.auth.cookie(token)})
 
-    def settings_get(self, s):
+    def settings_get(self, s, saved=False):
         if not s["admin"]:
             return self.err(HTTPStatus.FORBIDDEN, "Only an admin can see the settings.")
         try:
-            return self.send(200, saved_settings.describe())
+            body = saved_settings.describe()
         except config.ConfigError as e:
             return self.err(HTTPStatus.CONFLICT, str(e))
+        return self.send(200, {**body, "ok": True, "restartNeeded": True} if saved else body)
 
     def settings_save(self, s, data):
         if not s["admin"]:
@@ -76,4 +75,4 @@ class SetupRoutes:
         except OSError as e:
             log.error("settings can't be saved: %s", e.strerror)
             return self.err(HTTPStatus.INTERNAL_SERVER_ERROR, "Usher can't write its settings. Its log says more.")
-        return self.send(200, {**saved_settings.describe(), "ok": True, "restartNeeded": True})
+        return self.settings_get(s, saved=True)
