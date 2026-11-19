@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.1]
+
+### Fixed
+- In Setup, **Test** now reads only a small part of an app's reply and gives up when the reply takes too long. An address that answers with something huge or too slowly now shows a clear message instead of hanging.
+
 ## [1.4.0]
 
 ### Added

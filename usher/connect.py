@@ -7,9 +7,11 @@ be pointed at another host to make Usher hand a saved key over.
 """
 
 import ipaddress
+import json
 import logging
 import re
 import socket
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,6 +23,8 @@ from .clients import ApiError, Arr, Jellyfin, Transmission, _NoRedirect
 log = logging.getLogger("usher.connect")
 
 MAX_URL = 200
+MAX_REPLY = 65_536  # an app's version reply is a few hundred bytes; this is far more than any of them sends
+REPLY_SECONDS = 5  # checked between reads; the socket timeout alone lets a reply that trickles in never end
 
 
 @dataclass(frozen=True)
@@ -200,17 +204,37 @@ def verdict(app: App, version: str) -> dict:
     return {"verdict": "supported", "version": shown, "message": f"Connected. {name} {shown} is supported."}
 
 
+def _load_capped(r):
+    """json.load for a reply from an address an admin typed: only MAX_REPLY bytes, and only REPLY_SECONDS to get them.
+    ApiError (no status) when the reply is larger or doesn't end."""
+    deadline, body = time.monotonic() + REPLY_SECONDS, b""
+    while len(body) <= MAX_REPLY:
+        if time.monotonic() > deadline:
+            raise ApiError("reply took too long", reason="slow")
+        chunk = r.read1(min(8192, MAX_REPLY + 1 - len(body)))  # read() would wait for the full amount
+        if not chunk:
+            return json.loads(body)
+        body += chunk
+    raise ApiError("reply is larger than expected", reason="large")
+
+
 def _read_version(app_id: str, app: App, url: str, key: str, user: str):
     """(who answered, its version), from the call Usher itself makes. Raises ApiError. `who` is "" for Transmission,
     whose own call is specific to it."""
     if app_id in ("sonarr", "radarr", "prowlarr"):
-        data = Arr(app.label, url, key, "v1" if app_id == "prowlarr" else "v3").get("system/status")
+        client = Arr(app.label, url, key, "v1" if app_id == "prowlarr" else "v3")
+        client.load = _load_capped
+        data = client.get("system/status")
         who, version = (data.get("appName"), data.get("version")) if isinstance(data, dict) else ("", "")
     elif app_id == "jellyfin":
-        data = Jellyfin(url, key).get("/System/Info")
+        client = Jellyfin(url, key)
+        client.load = _load_capped
+        data = client.get("/System/Info")
         who, version = (str(data.get("ProductName", "")).split()[:1] or [""])[0], data.get("Version") if isinstance(data, dict) else ""
     elif app_id == "transmission":
-        data = Transmission(url, user, key).call("session-get", fields=["version"])
+        client = Transmission(url, user, key)
+        client.load = _load_capped
+        data = client.call("session-get", fields=["version"])
         who, version = app.label, data.get("version") if isinstance(data, dict) else ""
     else:
         raise ValueError(app_id)
@@ -240,6 +264,10 @@ def _problem(app: App, e: ApiError) -> dict:
         return {"verdict": "bad_key", "version": "", "message": f"{name} didn't accept that {app.credential}. Check it and try again."}
     if e.status and 300 <= e.status < 400:
         return {"verdict": "unreachable", "version": "", "message": f"That address sends you somewhere else. Enter the address {name} finally answers at."}
+    if e.reason == "large":
+        return {"verdict": "other_app", "version": "", "message": f"That address sent back far more than {name} does. Check the address and its port."}
+    if e.reason == "slow":
+        return {"verdict": "unreachable", "version": "", "message": f"That address was too slow to answer like {name}. Check the address, and try again."}
     if e.status == 404:
         return {"verdict": "other_app", "version": "", "message": f"That address answered, but not like {name}. Check the address and its port."}
     if e.status:

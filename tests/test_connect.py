@@ -198,6 +198,57 @@ class TestAgainstFakes(Case):
         handler = type("Page", (Base,), {"do_GET": lambda self: self.reply(b"<html></html>", ctype="text/html")})
         self.assertNotIn(connect.test("sonarr", serve(self, handler), KEY)["verdict"], ("supported", "untested", "too_old"))
 
+    def test_a_reply_larger_than_the_cap_is_stopped_and_said_so(self):
+        sent = []
+
+        class Huge(Base):
+            def do_GET(self):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                try:
+                    for _ in range(400):  # 400 MB if read to the end
+                        self.wfile.write(b" " * 1_000_000)
+                        sent.append(1)
+                except OSError:
+                    pass
+
+        for app_id in ("sonarr", "jellyfin"):
+            with self.subTest(app=app_id):
+                sent.clear()
+                out = connect.test(app_id, serve(self, Huge), KEY)
+                self.assertEqual(out["verdict"], "other_app", out)
+                self.assertIn("far more than", out["message"])
+                self.assertLess(len(sent), 100)  # not read to the end (400); socket buffers hold some
+
+    def test_a_transmission_reply_larger_than_the_cap_is_stopped(self):
+        handler = type("Huge", (Base,), {"do_POST": lambda self: self.reply(b"[" + b" " * (connect.MAX_REPLY + 10) + b"]")})
+        out = connect.test("transmission", serve(self, handler), TR_PASS, TR_USER)
+        self.assertEqual(out["verdict"], "other_app", out)
+
+    def test_a_reply_that_never_ends_is_stopped_at_the_time_limit(self):
+        class Endless(Base):
+            def do_GET(self):
+                self.send_response(200)
+                self.end_headers()
+                try:
+                    while True:  # a byte at a time: under the size cap, never done
+                        self.wfile.write(b" ")
+                        self.wfile.flush()
+                        time.sleep(0.02)
+                except OSError:
+                    pass
+
+        with mock.patch.object(connect, "REPLY_SECONDS", 0.3):
+            out = connect.test("sonarr", serve(self, Endless), KEY)
+        self.assertEqual(out["verdict"], "unreachable", out)
+        self.assertIn("too slow", out["message"])
+
+    def test_a_reply_just_under_the_cap_still_tests_fine(self):
+        padding = "x" * (connect.MAX_REPLY - 200)
+        handler = type("Big", (Base,), {"do_GET": lambda self: self.reply({"appName": "Sonarr", "version": "4.0.1", "pad": padding})})
+        self.assertEqual(connect.test("sonarr", serve(self, handler), KEY)["verdict"], "supported")
+
     def test_a_redirect_is_not_followed_and_the_key_does_not_go_with_it(self):
         seen = []
         target = serve(self, arr_with("4.0.9", seen))

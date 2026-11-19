@@ -25,9 +25,10 @@ log = logging.getLogger("usher")
 class ApiError(Exception):
     """An integration or TMDb failed. status: the HTTP status it answered with, when it answered at all."""
 
-    def __init__(self, message, status=None):
+    def __init__(self, message, status=None, reason=""):
         super().__init__(message)
         self.status = status
+        self.reason = reason  # "large" or "slow": Test's capped reader gave up on the reply
 
 
 def _open(req, timeout=TIMEOUT):
@@ -40,6 +41,8 @@ def _open(req, timeout=TIMEOUT):
 class Arr:
     """Sonarr / Radarr (API v3) and Prowlarr (API v1)."""
 
+    load = staticmethod(json.load)  # Test swaps in a reader with a size limit
+
     def __init__(self, name: str, base: str, key: str, version: str = "v3"):
         self.name, self.base, self.key, self.version = name, base, key, version
 
@@ -50,7 +53,7 @@ class Arr:
         req = urllib.request.Request(f"{self.base}/api/{self.version}/{path}{qs}", headers={"X-Api-Key": self.key, "Accept": "application/json"})
         try:
             with _open(req, timeout=_timeout) as r:
-                return json.load(r)
+                return self.load(r)
         except urllib.error.HTTPError as e:
             raise ApiError(f"{self.name}: {e}", e.code) from None
         except (urllib.error.URLError, OSError, ValueError) as e:
@@ -121,6 +124,8 @@ class Transmission:
     Callers always use the old method and field names; the new spelling stays inside this class. The 409 session
     handshake says which protocol to use: from 4.1 it carries X-Transmission-Rpc-Version."""
 
+    load = staticmethod(json.load)
+
     def __init__(self, url: str, user: str, password: str):
         self.url = url
         self._auth = "Basic " + base64.b64encode(f"{user}:{password}".encode()).decode()
@@ -157,7 +162,7 @@ class Transmission:
             )
             try:
                 with _open(req) as r:
-                    data = json.load(r)
+                    data = self.load(r)
                 return self._answer(method, data, jsonrpc)
             except urllib.error.HTTPError as e:
                 if e.code == 409:
@@ -197,6 +202,8 @@ def jellyfin_device_id(data_dir) -> str:
 
 
 class Jellyfin:
+    load = staticmethod(json.load)
+
     def __init__(self, base: str, key: str, user_id: str = "", device_id: str = ""):
         self.base, self.key = base, key
         # The server passes the kept ID; one-off uses (tests) get one of their own rather than share a made-up one.
@@ -218,7 +225,7 @@ class Jellyfin:
             raise ApiError("jellyfin: no API key")
         try:
             with _open(self._req(path, **params)) as r:
-                return json.load(r)
+                return self.load(r)
         except urllib.error.HTTPError as e:
             raise ApiError(f"jellyfin: {e}", e.code) from None
         except (urllib.error.URLError, OSError, ValueError) as e:
