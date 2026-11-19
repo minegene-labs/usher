@@ -141,7 +141,7 @@ class WorkflowTests(unittest.TestCase):
         publish = _step("Publish a release for a new version")
         self.assertIn("GH_TOKEN: ${{ github.token }}", publish)
         self.assertIn('--notes-file "$RUNNER_TEMP/release-notes.md"', publish)
-        promote = RELEASE.split("  report:", 1)[0]
+        promote = RELEASE.split("  image:", 1)[0]  # the promote job alone: the image job has its own token step
         self.assertEqual(promote.count("github.token"), 1)
         self.assertNotIn("GH_TOKEN", _step("Move stable to the tested commit (fast-forward only)"))
 

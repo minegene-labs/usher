@@ -175,6 +175,9 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      packages: write
+      id-token: write
+      attestations: write
 
   delete-branch:
     # Pull requests merged by hand: delete their branch too.

@@ -74,7 +74,7 @@ Usher is checked every week against the latest release of each integration, and 
 
 ## Quick start
 
-1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up auto-deploy and covers upgrading.
+1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up auto-deploy and covers upgrading. To run the published image from one Compose file instead, follow [Running the published image](deploy/README.md#running-the-published-image), which has its own steps for settings and the first account; steps 2 and 3 below are for the install folder.
 2. Copy [deploy/usher.example.toml](deploy/usher.example.toml) to `config/usher.toml` in the install folder and set at least `media_server.user_id` (`sudo usher-user ids` lists the IDs). Every key is in [docs/configuration.md](docs/configuration.md).
 3. Add an account: `sudo usher-user add <name> [Display Name]`.
 4. Open Usher's address on a phone and use Share → Add to Home Screen.

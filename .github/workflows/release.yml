@@ -4,10 +4,11 @@ name: Release
 # exactly that content: move the stable branch (which the server deploys from) to that commit, and
 # publish a release for a new version number. It isn't a workflow_run of Tests: GitHub doesn't send that
 # event for a run started with a workflow's own token, so merges made by Auto-merge were never released.
-# Then the report job, also when promote failed, checks the merge (.github/scripts/merge_report.py lists what)
-# and comments the result on the pull request. Each job asks for its own permissions: only promote can write
-# to stable, and only report can comment or write issues. A caller grants the sum of both. Each run reports the
-# commit it was called for; a merge whose run never starts (superseded by a later one) isn't reported.
+# The image job then publishes that version's container image, and the report job, also when promote failed, checks
+# the merge (.github/scripts/merge_report.py lists what) and comments the result on the pull request. Each job asks
+# for its own permissions: only promote can write to stable, only image can publish a package and attest it, and only
+# report can comment or write issues. A caller grants the sum of all three. Each run reports the commit it was called
+# for; a merge whose run never starts (superseded by a later one) isn't reported.
 on:
   workflow_call:
     inputs:
@@ -53,13 +54,111 @@ jobs:
             gh release create "v$VERSION" --target "$SHA" --title "Usher $VERSION" --notes-file "$RUNNER_TEMP/release-notes.md"
           fi
 
+  image:
+    # The container image of the version just promoted: linux/amd64 and linux/arm64 in GitHub's container registry,
+    # tagged with the version and latest, with its build provenance attested. A version that already has its image
+    # (a merge that changes nothing the image holds, or a re-run) builds nothing; the version tag is added last, so a
+    # run that stopped before it starts over. The job holds no secret and can't
+    # write to the repository: its token publishes packages and attests, and the commit is checked out without it.
+    # The base image is pinned by digest in the Dockerfile and kept current by Dependabot.
+    needs: [promote]
+    if: ${{ needs.promote.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read        # check out the commit
+      packages: write       # push the image
+      id-token: write       # sign the attestation
+      attestations: write   # store the attestation
+    concurrency:
+      group: release-image
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+      - name: Name the image
+        id: image
+        run: |
+          v=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' usher/__init__.py)
+          [ -n "$v" ] || { echo "::error::No __version__ found"; exit 1; }
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+      - name: Sign in to the registry
+        env:
+          TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+        run: printf '%s' "$TOKEN" | docker login ghcr.io --username "$ACTOR" --password-stdin
+      - name: Check whether this version already has its image
+        # The version tag is added last, after the image is pushed and attested, so a tag means the job finished.
+        # Only "not found" means it has to be built; any other answer (the registry down, a refused sign-in) stops the
+        # job so a re-run can try again.
+        id: exists
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.image.outputs.version }}
+        run: |
+          if answer=$(docker buildx imagetools inspect "$IMAGE:$VERSION" 2>&1); then
+            echo "$IMAGE:$VERSION is already published; nothing to build."
+            echo "publish=no" >> "$GITHUB_OUTPUT"
+          else
+            case "$answer" in
+              *"not found"*) echo "publish=yes" >> "$GITHUB_OUTPUT" ;;
+              *) echo "::error::Could not tell whether $IMAGE:$VERSION exists."; exit 1 ;;
+            esac
+          fi
+      - name: Set up emulation for the arm64 build
+        if: ${{ steps.exists.outputs.publish == 'yes' }}
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+        with:
+          platforms: arm64
+      - name: Build and publish the image for both platforms
+        # Pushed by digest, with no tag yet: the tags are added once the provenance is attested.
+        id: build
+        if: ${{ steps.exists.outputs.publish == 'yes' }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.image.outputs.version }}
+          SHA: ${{ inputs.sha || github.sha }}
+        run: |
+          docker buildx create --name usher --driver docker-container --use
+          docker buildx build \
+            --platform linux/amd64,linux/arm64 \
+            --output "type=image,name=$IMAGE,push-by-digest=true,name-canonical=true,push=true" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$SHA" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.licenses=MIT" \
+            --provenance=false --sbom=false \
+            --metadata-file "$RUNNER_TEMP/build.json" \
+            .
+          digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/build.json")
+          case "$digest" in sha256:????????????????????????????????????????????????????????????????) ;; *) echo "::error::No image digest found"; exit 1 ;; esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+      - name: Attest the image's build provenance
+        if: ${{ steps.exists.outputs.publish == 'yes' }}
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ steps.image.outputs.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+      - name: Tag the image with the version and latest
+        if: ${{ steps.exists.outputs.publish == 'yes' }}
+        env:
+          IMAGE: ${{ steps.image.outputs.name }}
+          VERSION: ${{ steps.image.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE@$DIGEST"
+
   report:
-    # One short job after promote, also when promote failed (then the report says so): the verdict and one line
+    # One short job after promote and image, also when either failed (then the report says so): the verdict and one line
     # per check, as a comment on the merged pull request and in the job summary. A PROBLEM opens or updates the one
     # "Merge problem" issue (found by its title and its bug and P1 labels) and turns the run red; the next OK closes
     # that issue. A push to main that no pull request made has nothing to report. One report at a time, so two
     # quick merges never open two problem issues.
-    needs: [promote]
+    needs: [promote, image]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -75,6 +174,7 @@ jobs:
       GH_REPO: ${{ github.repository }}
       SHA: ${{ inputs.sha || github.sha }}
       PROMOTE: ${{ needs.promote.result }}
+      IMAGE: ${{ needs.image.result }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

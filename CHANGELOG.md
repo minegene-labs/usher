@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.2.0]
+
+### Added
+- Usher is now published as a ready-made container image for 64-bit Intel/AMD and Arm computers, with one Compose file to run it, so it can be started without building it. The browser setup is still to come: for now it needs a settings file in its data volume (steps in the deploy guide). Servers that build Usher from source keep working as before.
+
 ## [1.1.6]
 
 ### Changed

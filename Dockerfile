@@ -19,6 +19,10 @@ COPY CHANGELOG.md .
 COPY usher/ usher/
 COPY web/ web/
 
+# The data folder belongs to the user below, so a new named volume mounted there (compose.yaml) starts out writable by it;
+# a folder mounted from the host (deploy/compose.yaml) is not affected.
+RUN mkdir /data && chown 1000:1001 /data
+
 # Runs as the media user and group on the host (1000:1001 by default); the compose file also makes the filesystem read-only.
 USER 1000:1001
 

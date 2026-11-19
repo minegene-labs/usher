@@ -104,3 +104,25 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
   sudo systemctl daemon-reload
   ```
 - **Moving the install folder:** `sudo docker compose down` in the old folder, move it, set `USHER_HOME=<new folder>` in `/etc/default/usher`, then `sudo docker compose up -d` in the new one.
+
+## Running the published image
+
+Everyone else can run Usher without building it. Each release publishes a container image for `linux/amd64` and `linux/arm64` at `ghcr.io/minegene-labs/usher`, tagged with the version and `latest`, with its build provenance attested. [`compose.yaml`](../compose.yaml) at the top of the repository runs it with nothing from the machine: the port on `127.0.0.1:8484` only, one named volume for Usher's data, the container's hardening described under Security model (non-root, read-only, no capabilities, memory and process limits), no remote parts and no Docker socket. It is separate from the install folder above, which builds from source and updates itself, and has its own steps for settings and accounts, because `setup.sh` and `usher-user` belong to that install.
+
+1. Download `compose.yaml` into an empty folder and read it: `docker compose config` prints what it will run. To stay on one version, set `USHER_VERSION` (for example `USHER_VERSION=1.2.0`) in a `.env` file beside it.
+2. Put the secrets in that `.env` file, one per line: `JELLYFIN_API_KEY`, `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY`, `TR_PASS` and, for Discover, `TMDB_TOKEN`. Keep it readable by you alone.
+3. Write the settings file into the data volume. Setting Usher up in the browser is still to come, so until then Usher doesn't start without it. Copy [usher.example.toml](usher.example.toml) to `usher.toml` in the same folder and set:
+   - `server.bind = "0.0.0.0:8484"`, where the container listens (the host only publishes it on `127.0.0.1`);
+   - `server.origin`, exactly the address people open Usher at, with `https://` and no trailing slash: Usher refuses a sign-in from any other address, and its sign-in cookie is only kept over HTTPS, so put a reverse proxy with HTTPS (or Tailscale Serve) in front of `127.0.0.1:8484` first;
+   - `server.trusted_proxies`: through the published port Usher sees the Docker network's gateway, not `127.0.0.1`, as the sender, so add that address (`docker network inspect` on the project's `default` network shows it) for the proxy's `X-Forwarded-For` to be believed; without it every device looks like one address to the sign-in limits and the log;
+   - the addresses of your apps (`http://host.docker.internal:8989` reaches an app on this machine whose port is published; `compose.yaml` maps that name).
+
+   Then copy the file into the volume (run it again after any change to the file, and `docker compose restart`):
+   ```bash
+   docker compose run --rm --no-deps -T --entrypoint sh usher -c 'cat > /data/usher.toml' < usher.toml
+   ```
+4. `docker compose run --rm --no-deps usher python -m usher.cli ids` lists the Jellyfin accounts and the Sonarr and Radarr quality profiles by ID. Set `media_server.user_id` (required) and the two `quality_profile_id` keys in `usher.toml`, and copy it into the volume again.
+5. `docker compose up -d --wait`, then add the first account: `docker compose exec usher python -m usher.cli add <name>` asks for a password. This is what `usher-user add` does on the install above. Open your address and sign in.
+6. To update, `docker compose pull && docker compose up -d`. The data volume keeps accounts and requests.
+
+To check where an image came from, `gh attestation verify oci://ghcr.io/minegene-labs/usher:<version> --repo minegene-labs/usher` verifies its provenance.

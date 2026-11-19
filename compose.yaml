@@ -1,0 +1,53 @@
+# Usher from its published image: one file, nothing else needed to start it. Docker Compose treats every file as
+# trusted code, so read it (`docker compose config` prints what it runs) before you start it. It mounts no folder of
+# this machine and never the Docker socket. See "Running the published image" in deploy/README.md.
+#   USHER_VERSION  the image version to run, for example 1.2.3; the newest when unset
+# Settings are in /data/usher.toml in the data volume (deploy/usher.example.toml lists every setting). Inside the
+# container Usher must listen on all addresses for the published port to reach it: set server.bind = "0.0.0.0:8484".
+# The host side of the port is 127.0.0.1 only, so other machines can't reach Usher until you put a reverse proxy or
+# Tailscale Serve in front of it.
+# Secrets (API keys, the Transmission password, the TMDb token) are never in the settings file: they come from a .env
+# file beside this one.
+# Reach Sonarr, Radarr, Prowlarr, Transmission and Jellyfin by address, for example http://host.docker.internal:8989
+# for one running on this machine with its port published.
+services:
+  usher:
+    image: ghcr.io/minegene-labs/usher:${USHER_VERSION:-latest}
+    container_name: usher
+    ports:
+      - "127.0.0.1:8484:8484"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    user: "1000:1001"
+    environment:
+      - USHER_CONFIG=/data/usher.toml
+      # secrets, taken from a .env file next to this one (or the shell); one that isn't set stays unset
+      - JELLYFIN_API_KEY
+      - SONARR_API_KEY
+      - RADARR_API_KEY
+      - PROWLARR_API_KEY
+      - TR_PASS
+      - TMDB_TOKEN
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 256m
+    pids_limit: 128
+    volumes:
+      - usher-data:/data
+    # the Dockerfile's HEALTHCHECK, repeated in full with start_interval: while starting it checks every 2 seconds
+    # (Docker Engine 25 or later), so `docker compose up --wait` returns within seconds
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8484/healthz', timeout=4).status == 200 else 1)"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+      start_interval: 2s
+      retries: 3
+    logging:
+      options: { max-size: "10m", max-file: "3" }
+    restart: unless-stopped
+
+volumes:
+  usher-data:

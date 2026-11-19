@@ -6,6 +6,7 @@ comment on the pull request and in the job summary; a PROBLEM also opens or upda
 tests/test_merge_report.py has the cases.
 
 - `promote` finished: when it failed, `stable` may not have moved and the version may have no release.
+- `image` finished: when it failed, the version's container image may not be published or attested.
 - The version in usher/__init__.py is released, tagged at the merge commit. A merge that changes only documentation,
   `.claude/` or `.github/` files ships nothing, so it needs no new version: an earlier release is fine.
 - `stable` is at the merge commit (or past it, when a later merge was released since).
@@ -18,8 +19,8 @@ tests/test_merge_report.py has the cases.
 
 Dependabot's updates keep the version and fix no issue, so those lines say so instead.
 
-Usage: python3 .github/scripts/merge_report.py SHA (GH_TOKEN and GITHUB_REPOSITORY in the environment; PROMOTE, the
-result of Release's promote job, defaults to success)
+Usage: python3 .github/scripts/merge_report.py SHA (GH_TOKEN and GITHUB_REPOSITORY in the environment; PROMOTE and IMAGE,
+the results of Release's promote and image jobs, default to success)
 """
 
 import base64
@@ -69,6 +70,15 @@ def check_promote(merge):
     if result == "success":
         return "ok", "The promote job finished."
     return "problem", f"The promote job didn't finish ({shown(result)}): `stable` may not have moved and the version may have no release."
+
+
+def check_image(merge):
+    result = merge["image"]
+    if result == "success":
+        return "ok", "The image job finished: this version's container image is published."
+    if result == "skipped" and merge["promote"] != "success":
+        return "info", "The image job didn't run, because the promote job didn't finish."
+    return "problem", f"The image job didn't finish ({shown(result)}): the version's container image may not be published or attested."
 
 
 def ships_nothing(files):
@@ -172,7 +182,7 @@ def is_problem_issue(issue):
     return str(issue.get("title", "")).startswith(PROBLEM_TITLE) and PROBLEM_LABELS <= labels_of(issue)
 
 
-CHECKS = (check_promote, check_version, check_stable, check_issues, check_files, check_priorities)
+CHECKS = (check_promote, check_image, check_version, check_stable, check_issues, check_files, check_priorities)
 
 
 def report(merge):
@@ -188,9 +198,10 @@ def report(merge):
     return verdict, "\n".join(lines) + "\n"
 
 
-def collect(api, sha, promote="success", now=None):
+def collect(api, sha, promote="success", now=None, image="success"):
     """Everything the checks read about the merge whose squash commit is `sha`; None when no pull request was
-    merged as that commit (a push straight to main). `promote` is the promote job's result."""
+    merged as that commit (a push straight to main). `promote` and `image` are the results of Release's
+    promote and image jobs."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     pulls = api.get(f"commits/{sha}/pulls") or []
     pull = next((p for p in pulls if p.get("merge_commit_sha") == sha and p.get("merged_at")), None)
@@ -215,6 +226,7 @@ def collect(api, sha, promote="success", now=None):
         "number": number,
         "sha": sha,
         "promote": promote,
+        "image": image,
         "dependabot": (pull.get("user") or {}).get("login") == DEPENDABOT,
         "body": body,
         "version": version,
@@ -270,7 +282,7 @@ def main(argv):
         raise SystemExit(__doc__)
     sha = argv[0]
     api = GitHub(os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"], os.environ.get("GITHUB_API_URL", "https://api.github.com"))
-    merge = collect(api, sha, os.environ.get("PROMOTE") or "success")
+    merge = collect(api, sha, os.environ.get("PROMOTE") or "success", image=os.environ.get("IMAGE") or "success")
     if merge is None:
         verdict, text, outputs = "", f"No pull request was merged as {sha[:12]}, so there is no merge to report.\n", {}
     else:

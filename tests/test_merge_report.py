@@ -39,6 +39,7 @@ def merge(**changes):
         "number": 42,
         "sha": SHA,
         "promote": "success",
+        "image": "success",
         "dependabot": False,
         "body": BODY,
         "version": "1.2.0",
@@ -157,6 +158,23 @@ class PromoteTests(unittest.TestCase):
             verdict, lines = run(promote=result, stable="behind", release_commit=None)
             self.assertEqual(verdict, "PROBLEM", result)
             self.assertIn(f"**problem**: The promote job didn't finish ({result}): `stable` may not have moved", line(lines, "promote job"))
+
+
+class ImageTests(unittest.TestCase):
+    def test_a_published_image_is_ok(self):
+        verdict, lines = run()
+        self.assertEqual("- **ok**: The image job finished: this version's container image is published.", line(lines, "image job"))
+
+    def test_a_failed_image_is_a_problem_even_though_promote_finished(self):
+        for result in ("failure", "cancelled", "skipped"):
+            verdict, lines = run(image=result)
+            self.assertEqual(verdict, "PROBLEM", result)
+            self.assertIn(f"**problem**: The image job didn't finish ({result}): the version's container image may not be", line(lines, "image job"))
+
+    def test_an_image_that_didnt_run_because_promote_failed_adds_no_second_problem(self):
+        verdict, lines = run(promote="failure", image="skipped", stable="behind", release_commit=None)
+        self.assertIn("**info**: The image job didn't run, because the promote job didn't finish.", line(lines, "image job"))
+        self.assertEqual(verdict, "PROBLEM")  # for promote's own failure, not the image
 
 
 class FlaggedFileTests(unittest.TestCase):
@@ -296,6 +314,7 @@ class CollectTests(unittest.TestCase):
         data = report_mod.collect(fake_github(), SHA, now=NOW)
         self.assertEqual(data["number"], 42)
         self.assertEqual(data["promote"], "success")
+        self.assertEqual(data["image"], "success")
         self.assertFalse(data["dependabot"])
         self.assertEqual(data["version"], "1.2.0")
         self.assertEqual(data["release_commit"], SHA)
@@ -349,6 +368,11 @@ class MainTests(unittest.TestCase):
         self.assertIn("**problem**: The promote job didn't finish (failure)", printed)
         self.assertIn("verdict=PROBLEM\n", outputs)
 
+    def test_reports_a_failed_image(self):
+        printed, outputs = self.run_main(fake_github(), {"IMAGE": "failure"})
+        self.assertIn("**problem**: The image job didn't finish (failure)", printed)
+        self.assertIn("verdict=PROBLEM\n", outputs)
+
     def test_no_pull_request_sets_no_outputs(self):
         printed, outputs = self.run_main(fake_github(**{f"commits/{SHA}/pulls": []}))
         self.assertIn("no merge to report", printed)
@@ -390,15 +414,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_only_promote_can_write_to_stable(self):
         self.assertRegex(self.text, r"(?m)^permissions: \{\}$")
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", self.text.split("\njobs:\n", 1)[1]), ["promote", "report"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", self.text.split("\njobs:\n", 1)[1]), ["promote", "image", "report"])
         self.assertEqual(_permissions(_job(self.text, "promote")), {"contents": "write"})
         self.assertEqual(_permissions(_job(self.text, "report")), {"contents": "read", "pull-requests": "write", "issues": "write"})
 
     def test_report_runs_after_promote_even_when_it_failed_and_reads_github_only(self):
         job = _job(self.text, "report")
-        self.assertRegex(job, r"(?m)^    needs: \[promote\]$")
+        self.assertRegex(job, r"(?m)^    needs: \[promote, image\]$")
         self.assertRegex(job, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
         self.assertRegex(job, r"(?m)^      PROMOTE: \$\{\{ needs\.promote\.result \}\}$")
+        self.assertRegex(job, r"(?m)^      IMAGE: \$\{\{ needs\.image\.result \}\}$")
         self.assertIn("persist-credentials: false", job)
         self.assertIn("sparse-checkout: .github/scripts", job)
         self.assertIn('python3 .github/scripts/merge_report.py "$SHA"', job)
@@ -427,7 +452,9 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_callers_grant_what_release_needs(self):
         for name in ("tests.yml", "auto-merge.yml"):
             job = _job((WORKFLOWS / name).read_text(encoding="utf-8"), "release")
-            self.assertEqual(_permissions(job), {"contents": "write", "pull-requests": "write", "issues": "write"}, name)
+            expected = {"contents": "write", "pull-requests": "write", "issues": "write"}
+            expected |= {"packages": "write", "id-token": "write", "attestations": "write"}
+            self.assertEqual(_permissions(job), expected, name)
 
 
 def _step_script(text, name):
