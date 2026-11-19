@@ -47,7 +47,13 @@ console.log(JSON.stringify(out));
 
 
 def run(steps):
-    code = HARNESS % {"setup": (WEB / "setup.js").as_uri(), "account": (WEB / "account.js").as_uri(), "connect": (WEB / "connect.js").as_uri(), "data": (WEB / "data.js").as_uri(), "steps": steps}
+    code = HARNESS % {
+        "setup": (WEB / "setup.js").as_uri(),
+        "account": (WEB / "account.js").as_uri(),
+        "connect": (WEB / "connect.js").as_uri(),
+        "data": (WEB / "data.js").as_uri(),
+        "steps": steps,
+    }
     done = subprocess.run(["node", "--input-type=module", "-e", code], capture_output=True, text=True, check=True)
     return json.loads(done.stdout)
 

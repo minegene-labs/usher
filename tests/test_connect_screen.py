@@ -179,6 +179,35 @@ out.posted = calls.some((c) => c.method === "POST");
         self.assertEqual(out["started"], 1)
         self.assertFalse(out["posted"])
 
+    def test_an_edit_after_a_test_means_it_has_to_be_tested_again(self):
+        out = run(
+            steps("""
+answers["/api/connect/test"] = [200, { app: "sonarr", url: "http://sonarr:8989", verdict: "supported", version: "4.0.9", message: "ok" }];
+answers["/api/settings"] = [200, { ok: true }];
+const app = make();
+await app.connectApps();
+const sonarr = section(app, "sonarr");
+await click(button(sonarr, "Test"));
+input(sonarr, "sonarr-key").on.input({});
+out.message = result(sonarr).textContent;
+await click(button(app, "Save"));
+out.posted = calls.some((c) => c.path === "/api/settings");
+""")
+        )
+        self.assertEqual(out["message"], "")
+        self.assertFalse(out["posted"])
+
+    def test_a_screen_that_cannot_be_drawn_still_opens_the_app(self):
+        out = run(
+            """
+answers["/api/connect"] = [200, { apps: [{ id: "sonarr" }] }];
+const app = make();
+await app.connectApps();
+out.started = app.started;
+"""
+        )
+        self.assertEqual(out["started"], 1)
+
     def test_a_server_that_cannot_describe_the_apps_opens_the_app(self):
         out = run(
             """

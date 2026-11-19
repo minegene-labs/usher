@@ -6,26 +6,21 @@ kept, logged or returned; a key already saved is used only against the address i
 be pointed at another host to make Usher hand a saved key over.
 """
 
-import concurrent.futures
 import ipaddress
 import logging
 import re
 import socket
-import struct
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 
 from . import config, discover
-from .saved_settings import USERINFO
-from .clients import ApiError, Arr, Jellyfin, Transmission
+from .clients import ApiError, Arr, Jellyfin, Transmission, _NoRedirect
 
 log = logging.getLogger("usher.connect")
 
 MAX_URL = 200
-PROBE_TIMEOUT = 0.4  # seconds to wait for a port to open: finding an app must not hold the page up
 
 
 @dataclass(frozen=True)
@@ -112,11 +107,11 @@ class BadAddress(ValueError):
     """The address can't be one of the apps; the message says why, in words for the person who typed it."""
 
 
-def clean_url(app: App, raw) -> str:
+def normalise(app: App, raw) -> str:
     """The address as Usher will save and use it, or BadAddress. Transmission gets its usual path when none is given."""
     text = str(raw or "").strip()
     if not text or len(text) > MAX_URL:
-        raise BadAddress("Enter the address, such as http://192.168.1.20:8989")
+        raise BadAddress("Enter the address, such as http://sonarr:8989")
     try:
         parts = urllib.parse.urlsplit(text)
         port = parts.port
@@ -128,16 +123,45 @@ def clean_url(app: App, raw) -> str:
         raise BadAddress("Leave the username, password and anything after a ? or # out of the address.")
     if port == 0:
         raise BadAddress("That address isn't valid.")
-    try:
-        ip = ipaddress.ip_address(parts.hostname)
-    except ValueError:
-        ip = None  # a name, not a number
-    if ip and (ip.is_link_local or ip.is_unspecified or ip.is_multicast):
-        raise BadAddress("That address can't be an app.")  # link-local holds cloud metadata services
     path = parts.path.rstrip("/")
     if app.path and not path:
         path = app.path
     return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, "", ""))
+
+
+def _refuse_special(host: str, port):
+    """Refuse an address that is, or resolves to, a link-local, unspecified or multicast one: link-local holds cloud
+    metadata services. The resolver is asked, so 2852039166 and 0xa9fea9fe, which it reads as 169.254.169.254, are
+    caught as well as a name that points there. A name that doesn't resolve is left for Test to report as unreachable."""
+    try:
+        found = socket.getaddrinfo(host, port or 80, type=socket.SOCK_STREAM)
+    except OSError:
+        return
+    for family, _, _, _, sockaddr in found:
+        ip = ipaddress.ip_address(sockaddr[0].split("%")[0])
+        ip = getattr(ip, "ipv4_mapped", None) or ip
+        if ip.is_link_local or ip.is_unspecified or ip.is_multicast:
+            raise BadAddress("That address can't be an app.")
+
+
+def clean_url(app: App, raw) -> str:
+    """normalise(), and the address must not lead to a special one. A name is resolved here and again when Test
+    connects, so this is a guard against mistakes, not against a name that changes its answer in between."""
+    url = normalise(app, raw)
+    parts = urllib.parse.urlsplit(url)
+    _refuse_special(parts.hostname, parts.port)
+    return url
+
+
+def _shown(url: str) -> str:
+    """The saved address for the page: no username, password or query, which an operator's own file may hold."""
+    try:
+        parts = urllib.parse.urlsplit(url)
+        host = f"[{parts.hostname}]" if ":" in (parts.hostname or "") else (parts.hostname or "")
+        netloc = f"{host}:{parts.port}" if parts.port else host
+        return urllib.parse.urlunsplit((parts.scheme, netloc, parts.path, "", ""))
+    except ValueError:
+        return ""
 
 
 def saved_url(app: App) -> str:
@@ -176,26 +200,33 @@ def verdict(app: App, version: str) -> dict:
     return {"verdict": "supported", "version": shown, "message": f"Connected. {name} {shown} is supported."}
 
 
-def _read_version(app_id: str, app: App, url: str, key: str, user: str) -> str:
-    """Ask the app for its version with the call Usher itself makes. Raises ApiError."""
-    if app_id in ("sonarr", "radarr"):
-        data = Arr(app.label, url, key, "v3").get("system/status")
-    elif app_id == "prowlarr":
-        data = Arr(app.label, url, key, "v1").get("system/status")
+def _read_version(app_id: str, app: App, url: str, key: str, user: str):
+    """(who answered, its version), from the call Usher itself makes. Raises ApiError. `who` is "" for Transmission,
+    whose own call is specific to it."""
+    if app_id in ("sonarr", "radarr", "prowlarr"):
+        data = Arr(app.label, url, key, "v1" if app_id == "prowlarr" else "v3").get("system/status")
+        who, version = (data.get("appName"), data.get("version")) if isinstance(data, dict) else ("", "")
     elif app_id == "jellyfin":
         data = Jellyfin(url, key).get("/System/Info")
-        return str(data.get("Version", "")) if isinstance(data, dict) else ""
+        who, version = (str(data.get("ProductName", "")).split()[:1] or [""])[0], data.get("Version") if isinstance(data, dict) else ""
     elif app_id == "transmission":
         data = Transmission(url, user, key).call("session-get", fields=["version"])
+        who, version = app.label, data.get("version") if isinstance(data, dict) else ""
     else:
         raise ValueError(app_id)
-    return str(data.get("version", "")) if isinstance(data, dict) else ""
+    return str(who or ""), str(version or "")
 
 
 def _read_tmdb(key: str):
-    req = urllib.request.Request(f"{discover.API}/authentication", headers={"Authorization": f"Bearer {key}", "Accept": "application/json"})
+    """TMDb takes the long access token in a header, and the older 32-character key only as a query, as Discover does."""
+    headers, query = {"Accept": "application/json"}, ""
+    if len(key) == 32:
+        query = "?" + urllib.parse.urlencode({"api_key": key})
+    else:
+        headers["Authorization"] = f"Bearer {key}"
+    req = urllib.request.Request(f"{discover.API}/authentication{query}", headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=10):
+        with urllib.request.build_opener(_NoRedirect()).open(req, timeout=10):
             return
     except urllib.error.HTTPError as e:
         raise ApiError(f"tmdb: HTTP {e.code}", e.code) from None
@@ -207,11 +238,20 @@ def _problem(app: App, e: ApiError) -> dict:
     name = app.label
     if e.status in (401, 403):
         return {"verdict": "bad_key", "version": "", "message": f"{name} didn't accept that {app.credential}. Check it and try again."}
+    if e.status and 300 <= e.status < 400:
+        return {"verdict": "unreachable", "version": "", "message": f"That address sends you somewhere else. Enter the address {name} finally answers at."}
     if e.status == 404:
         return {"verdict": "other_app", "version": "", "message": f"That address answered, but not like {name}. Check the address and its port."}
     if e.status:
         return {"verdict": "unreachable", "version": "", "message": f"{name} answered with an error (HTTP {e.status}). Try again in a moment."}
     return {"verdict": "unreachable", "version": "", "message": f"Usher couldn't reach {name} at that address. Check it, and that {name} is running."}
+
+
+def _is_saved_address(app: App, base: str) -> bool:
+    try:
+        return base == normalise(app, saved_url(app))
+    except BadAddress:
+        return False  # a saved address Usher wouldn't take as typed (it holds a password, say): no saved key goes to it
 
 
 def test(app_id: str, url, key, user="") -> dict:
@@ -220,8 +260,9 @@ def test(app_id: str, url, key, user="") -> dict:
     app = APPS[app_id]
     base = clean_url(app, url) if app.url_setting else ""
     key = str(key or "").strip()
-    if not key and (not app.url_setting or base == clean_url(app, saved_url(app))):
+    if not key and (not app.url_setting or _is_saved_address(app, base)):
         key = config.secret(app.secret)  # only for the address it was saved with
+    cause = ""
     if not key:
         out = {"verdict": "no_key", "version": "", "message": f"Paste the {app.credential} first."}
     else:
@@ -230,62 +271,12 @@ def test(app_id: str, url, key, user="") -> dict:
                 _read_tmdb(key)
                 out = {"verdict": "supported", "version": "", "message": "Connected. TMDb accepted the token."}
             else:
-                out = verdict(app, _read_version(app_id, app, base, key, str(user or "").strip() or _saved_user(app)))
+                who, version = _read_version(app_id, app, base, key, str(user or "").strip() or _saved_user(app))
+                out = verdict(app, version) if who.lower() == app.label.lower() else verdict(app, "")  # another app: not this one
         except ApiError as e:
-            out = _problem(app, e)
-    log.info("connect test: %s %s", app_id, out["verdict"])  # never the address' credentials or the key
+            out, cause = _problem(app, e), f" ({e})"  # what the app or the network said: no key or address in it
+    log.info("connect test: %s %s%s", app_id, out["verdict"], cause)
     return {"app": app_id, "url": base, **out}
-
-
-# finding the apps -------------------------------------------------------------------------------------------
-def _gateway():
-    """The container's default gateway, which is the host on a Docker network; None where it can't be read."""
-    try:
-        lines = Path("/proc/net/route").read_text(encoding="ascii").splitlines()[1:]
-    except OSError:
-        return None  # not Linux, or not readable: no host to suggest
-    for line in lines:
-        fields = line.split()
-        if len(fields) > 2 and fields[1] == "00000000":
-            try:
-                return socket.inet_ntoa(struct.pack("<L", int(fields[2], 16)))
-            except ValueError:
-                return None
-    return None
-
-
-def candidates(app_id: str) -> list:
-    """Where the app usually is: this machine, the host, and the name the usual compose guides give its container.
-    Nothing else is tried: Usher doesn't scan the network."""
-    app = APPS[app_id]
-    if not app.port:
-        return []
-    hosts = ["127.0.0.1", "host.docker.internal", app_id]
-    if gateway := _gateway():
-        hosts.insert(1, gateway)
-    return [f"http://{host}:{app.port}{app.path}" for host in dict.fromkeys(hosts)]
-
-
-def _listening(url: str) -> bool:
-    """Whether something accepts connections there. Nothing is sent, so no key or request leaves Usher."""
-    parts = urllib.parse.urlsplit(url)
-    try:
-        with socket.create_connection((parts.hostname, parts.port), timeout=PROBE_TIMEOUT):
-            return True
-    except OSError:
-        return False
-
-
-def suggestions() -> dict:
-    """{app id: [addresses with something listening]} for every app that has a usual port."""
-    todo = [(app_id, url) for app_id in ORDER for url in candidates(app_id)]
-    with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
-        found = list(pool.map(lambda item: _listening(item[1]), todo))
-    out: dict = {app_id: [] for app_id in ORDER}
-    for (app_id, url), up in zip(todo, found):
-        if up:
-            out[app_id].append(url)
-    return out
 
 
 def describe() -> list:
@@ -301,7 +292,7 @@ def describe() -> list:
             "setting": app.url_setting,
             "secret": app.secret,
             "userSetting": app.user_setting,
-            "url": USERINFO.sub(r"\1…@", saved_url(app)),  # an operator's own file may hold a password in an address
+            "url": _shown(saved_url(app)),
             "user": _saved_user(app),
             "hasUser": bool(app.user_setting),
             "keySaved": key_is_saved(app),

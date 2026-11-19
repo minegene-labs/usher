@@ -16,6 +16,7 @@ The terms used in Usher's code, comments, docs and issues. Use these rather than
 | **Family-friendly** | A title with a rating in `family.ratings` (G, PG, TV-Y, TV-Y7, TV-Y7-FV, TV-G or TV-PG by default). With `family.tv_folder` / `family.movie_folder` set, these are filed in separate family-friendly library folders. |
 | **Setup code** | The one-time code a new Usher with no accounts prints in its log. Entering it on the Setup page creates the first account; once that exists the Setup page is gone for good. |
 | **Admin** | An account that may change Usher's settings in the app. The first account, made with the setup code, is the admin; accounts made with `usher-user add` are not. |
+| **Connect step** | The part of setup after the first account where an admin enters each integration's address and key and presses Test. Test reads the integration's version and says Supported, Not tested yet (it works, with a note) or Too old. |
 | **Operator** | Whoever installs and runs Usher: sets up the server, `usher.toml` and accounts. |
 | **User** | Anyone with an Usher account who signs in to the web client. |
 | **Site settings** | Everything specific to one installation, kept in `usher.toml` and `.env` on the server, never in this repo. |

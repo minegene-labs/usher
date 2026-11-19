@@ -7,13 +7,14 @@ import json
 import os
 import socket
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 from unittest import mock
 
 from tests.mock_apps import JF_KEY, KEY, Base, JfHandler, TmdbHandler, TrHandler, TrHandler40, arr_handler
 from tests.test_setup import PASSWORD, Case, WebCase, setup_token_hash
-from usher import config, connect, discover, saved_settings
+from usher import config, connect, connect_find, discover, saved_settings
 from usher.auth import hash_password
 
 TR_USER, TR_PASS = "viewer", "made-up-tr-pass"
@@ -29,7 +30,7 @@ def serve(case, handler):
     return f"http://127.0.0.1:{srv.server_address[1]}"
 
 
-def arr_with(version, seen=None):
+def arr_with(version, seen=None, app_name="Sonarr"):
     """A Sonarr-like fake that reports `version` and records the key it was sent."""
 
     class H(Base):
@@ -39,7 +40,7 @@ def arr_with(version, seen=None):
             if self.headers.get("X-Api-Key") != KEY:
                 return self.reply({"error": "unauthorised"}, 401)
             if self.path.endswith("/system/status"):
-                return self.reply({"version": version})
+                return self.reply({"appName": app_name, "version": version})
             return self.reply({}, 404)
 
     return H
@@ -110,6 +111,10 @@ class AddressTests(Case):
             "http://sonarr:0",
             "http://169.254.169.254/latest",
             "http://0.0.0.0:8989",
+            "http://2852039166",  # 169.254.169.254 written as one number
+            "http://0xa9fea9fe",
+            "http://[fe80::1]:8989",
+            "http://[::ffff:169.254.169.254]",
             "x" * 300,
         )
         for bad in bad_ones:
@@ -182,6 +187,54 @@ class TestAgainstFakes(Case):
             self.assertEqual(connect.test("tmdb", "", "tmdb-test-token")["verdict"], "supported")
             self.assertEqual(connect.test("tmdb", "", "wrong")["verdict"], "bad_key")
 
+    def test_the_wrong_app_at_the_address_is_not_taken_for_the_right_one(self):
+        sonarr = serve(self, arr_with("4.0.9", app_name="Sonarr"))
+        for app_id in ("radarr", "prowlarr"):
+            with self.subTest(app=app_id):
+                out = connect.test(app_id, sonarr, KEY)
+                self.assertEqual(out["verdict"], "other_app", out)
+
+    def test_a_page_that_is_not_json_is_not_reported_as_the_app(self):
+        handler = type("Page", (Base,), {"do_GET": lambda self: self.reply(b"<html></html>", ctype="text/html")})
+        self.assertNotIn(connect.test("sonarr", serve(self, handler), KEY)["verdict"], ("supported", "untested", "too_old"))
+
+    def test_a_redirect_is_not_followed_and_the_key_does_not_go_with_it(self):
+        seen = []
+        target = serve(self, arr_with("4.0.9", seen))
+
+        class Redirect(Base):
+            def do_GET(self):
+                self.send_response(302)
+                self.send_header("Location", target + "/api/v3/system/status")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+
+        out = connect.test("sonarr", serve(self, Redirect), KEY)
+        self.assertEqual(out["verdict"], "unreachable")
+        self.assertIn("somewhere else", out["message"])
+        self.assertEqual(seen, [], "the key must not follow a redirect")
+
+    def test_the_older_tmdb_key_is_checked_as_discover_uses_it(self):
+        seen = []
+
+        class Tmdb(Base):
+            def do_GET(self):
+                seen.append((self.headers.get("Authorization"), self.path))
+                self.reply({"success": True} if "api_key=" + "k" * 32 in self.path else {}, 200 if "api_key=" + "k" * 32 in self.path else 401)
+
+        with mock.patch.object(discover, "API", serve(self, Tmdb)):
+            self.assertEqual(connect.test("tmdb", "", "k" * 32)["verdict"], "supported")
+        self.assertEqual(seen[0][0], None)
+
+    def test_the_cause_of_a_failure_is_logged_without_the_address(self):
+        with socket.socket() as s:
+            s.bind(("127.0.0.1", 0))
+            port = s.getsockname()[1]
+        with self.assertLogs("usher.connect", "INFO") as logs:
+            connect.test("sonarr", f"http://127.0.0.1:{port}", KEY)
+        self.assertIn("unreachable", logs.output[0])
+        self.assertNotIn(str(port), logs.output[0])
+
     def test_no_key_asks_for_one(self):
         self.assertEqual(connect.test("sonarr", serve(self, arr_handler("sonarr")), "  ")["verdict"], "no_key")
 
@@ -211,38 +264,68 @@ class SavedKeyTests(Case):
             self.assertEqual(connect.test("sonarr", self.elsewhere, "")["verdict"], "no_key")
 
 
+class SavedAddressWithCredentialsTests(Case):
+    def test_an_address_with_a_password_gets_no_saved_key_and_is_shown_without_it(self):
+        saved_settings.ensure_file()
+        seen = []
+        home = serve(self, arr_with("4.0.9", seen))
+        with_login = home.replace("http://", "http://user:pw@")
+        saved_settings.save({"pvr.tv.url": with_login}, {"SONARR_API_KEY": KEY})
+        self.assertEqual(connect.test("sonarr", home, "")["verdict"], "no_key")
+        self.assertEqual(seen, [])
+        shown = next(a for a in connect.describe() if a["id"] == "sonarr")["url"]
+        self.assertEqual(shown, home)
+        self.assertNotIn("pw", shown)
+
+
 class FindingTests(Case):
     def test_only_the_usual_places_are_tried(self):
-        with mock.patch.object(connect, "_gateway", return_value="172.18.0.1"):
+        with mock.patch.object(connect_find, "_gateway", return_value="172.18.0.1"):
             self.assertEqual(
-                connect.candidates("sonarr"),
+                connect_find.candidates("sonarr"),
                 ["http://127.0.0.1:8989", "http://172.18.0.1:8989", "http://host.docker.internal:8989", "http://sonarr:8989"],
             )
-            self.assertEqual(connect.candidates("transmission")[0], "http://127.0.0.1:9091/transmission/rpc")
-            self.assertEqual(connect.candidates("tmdb"), [])
+            self.assertEqual(connect_find.candidates("transmission")[0], "http://127.0.0.1:9091/transmission/rpc")
+            self.assertEqual(connect_find.candidates("tmdb"), [])
 
     def test_suggestions_are_the_places_where_something_listens(self):
         up = ("http://sonarr:8989", "http://127.0.0.1:7878")
-        with mock.patch.object(connect, "_gateway", return_value=None), mock.patch.object(connect, "_listening", lambda url: url in up):
-            found = connect.suggestions()
+        with mock.patch.object(connect_find, "_gateway", return_value=None), mock.patch.object(connect_find, "_listening", lambda url: url in up):
+            found = connect_find.suggestions()
         self.assertEqual(found["sonarr"], ["http://sonarr:8989"])
         self.assertEqual(found["radarr"], ["http://127.0.0.1:7878"])
         self.assertEqual((found["jellyfin"], found["tmdb"]), ([], []))
+
+    def test_a_slow_lookup_does_not_hold_the_page_up(self):
+        def listening(url):
+            if "sonarr" in url:
+                threading.Event().wait(5)
+            return url == "http://127.0.0.1:7878"
+
+        with (
+            mock.patch.object(connect_find, "_gateway", return_value=None),
+            mock.patch.object(connect_find, "_listening", listening),
+            mock.patch.object(connect_find, "BUDGET", 0.3),
+        ):
+            started = time.monotonic()
+            found = connect_find.suggestions()
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertEqual((found["radarr"], found["sonarr"]), (["http://127.0.0.1:7878"], []))
 
     def test_listening_is_a_plain_connection_that_sends_nothing(self):
         with socket.socket() as s:
             s.bind(("127.0.0.1", 0))
             s.listen()
             port = s.getsockname()[1]
-            self.assertTrue(connect._listening(f"http://127.0.0.1:{port}"))
-        self.assertFalse(connect._listening(f"http://127.0.0.1:{port}"))
+            self.assertTrue(connect_find._listening(f"http://127.0.0.1:{port}"))
+        self.assertFalse(connect_find._listening(f"http://127.0.0.1:{port}"))
 
     def test_the_gateway_is_read_from_the_routing_table(self):
         table = "Iface\tDestination\tGateway\tFlags\neth0\t00000000\t0111A8C0\t0003\neth0\t0011A8C0\t00000000\t0001\n"
         with mock.patch("pathlib.Path.read_text", return_value=table):
-            self.assertEqual(connect._gateway(), "192.168.17.1")
+            self.assertEqual(connect_find._gateway(), "192.168.17.1")
         with mock.patch("pathlib.Path.read_text", side_effect=OSError):
-            self.assertIsNone(connect._gateway())
+            self.assertIsNone(connect_find._gateway())
 
 
 class ConnectRouteTests(WebCase):
@@ -253,7 +336,7 @@ class ConnectRouteTests(WebCase):
         alex, _ = self.auth.sign_in("alex", PASSWORD, "10.0.0.5", "iPhone")
         self.alex = alex
         self.alex_csrf = self.store.session(setup_token_hash(alex))["csrf"]
-        patch = mock.patch.object(connect, "suggestions", return_value={"sonarr": ["http://sonarr:8989"]})
+        patch = mock.patch.object(connect_find, "suggestions", return_value={"sonarr": ["http://sonarr:8989"]})
         patch.start()
         self.addCleanup(patch.stop)
 
@@ -265,6 +348,10 @@ class ConnectRouteTests(WebCase):
         self.assertEqual(self.call("/api/connect", cookie=self.alex)[0], 403)
         self.assertEqual(self.call("/api/connect/test", {"app": "sonarr"}, csrf=self.csrf)[0], 401)
         self.assertEqual(self.post_test({"app": "sonarr", "url": "http://x"}, token=self.alex, csrf=self.alex_csrf)[0], 403)
+
+    def test_a_test_from_another_origin_is_refused(self):
+        status, _, _ = self.call("/api/connect/test", {"app": "sonarr"}, cookie=self.token, csrf=self.csrf, origin="http://other.test")
+        self.assertEqual(status, 403)
 
     def test_a_test_needs_the_csrf_token(self):
         self.assertEqual(self.post_test({"app": "sonarr"}, csrf="wrong")[0], 403)

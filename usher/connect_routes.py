@@ -3,7 +3,7 @@
 import logging
 from http import HTTPStatus
 
-from . import connect
+from . import connect, connect_find
 
 log = logging.getLogger("usher")
 
@@ -14,7 +14,7 @@ class ConnectRoutes:
         something is listening on its usual port."""
         if not s["admin"]:
             return self.err(HTTPStatus.FORBIDDEN, "Only an admin can connect the apps.")
-        found = connect.suggestions()
+        found = connect_find.suggestions()
         return self.send(200, {"apps": [{**app, "suggestions": found.get(app["id"], [])} for app in connect.describe()]})
 
     def connect_test(self, s, data):

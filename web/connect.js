@@ -8,8 +8,11 @@ const GOOD = ["supported", "untested"];   // a version Usher works with; "untest
 export const Connect = (Base) => class extends Base {
   // After the first account: connect the apps, or leave it for later. Anything that goes wrong here opens the app.
   async connectApps() {
-    let apps;
-    try { apps = (await api("/api/connect")).apps; } catch { return this.start(); }
+    try { await this.connectStep(); } catch { this.start(); }   // a screen that can't be drawn must not strand a new account
+  }
+
+  async connectStep() {
+    const apps = (await api("/api/connect")).apps;
     const rows = apps.map((app) => this.connectRow(app));
     const note = h("p", { class: "connect-note", role: "status" });
     const next = h("button", { class: "btn plain", type: "button", onclick: () => this.start() }, "Skip for now");
@@ -44,7 +47,9 @@ export const Connect = (Base) => class extends Base {
     const found = app.hasAddress ? h("datalist", { id: `${app.id}-found` }, app.suggestions.map((s) => h("option", { value: s }))) : null;
     const result = h("p", { class: "connect-result", role: "status" });
     const button = h("button", { class: "btn small", type: "button" }, "Test");
-    let last = null;   // the answer to the latest Test
+    let last = null;   // the answer to the latest Test, for the address and key as they were then
+    const edited = () => { last = null; result.className = "connect-result"; result.textContent = ""; };   // what was tested is no longer what is typed
+    for (const input of [url, user, key]) input?.addEventListener("input", edited);
     button.addEventListener("click", async () => {
       button.disabled = true; last = null; result.className = "connect-result"; result.textContent = "Testing…";
       try {

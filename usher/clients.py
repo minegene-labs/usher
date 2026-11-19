@@ -31,8 +31,9 @@ class ApiError(Exception):
 
 
 def _open(req, timeout=TIMEOUT):
-    # The integrations live on localhost; never follow redirects or honour proxy settings.
-    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    # The integrations live on localhost; never follow redirects (urllib would send the key on to wherever they point)
+    # or honour proxy settings.
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect())
     return opener.open(req, timeout=timeout)
 
 

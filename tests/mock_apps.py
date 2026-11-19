@@ -892,7 +892,7 @@ class JfHandler(Base):
         if u.path == "/System/Info/Public":
             return self.reply({"Id": "e" * 32, "ServerName": "jellyfin", "Version": "12.4.0"})
         if u.path == "/System/Info":
-            return self.reply({"Version": "12.4.0 (mock)", "ServerName": "jellyfin"})
+            return self.reply({"Version": "12.4.0 (mock)", "ServerName": "jellyfin", "ProductName": "Jellyfin Server"})
         if u.path == "/Sessions":
             return self.reply(
                 [
