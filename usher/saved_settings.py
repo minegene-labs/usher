@@ -105,9 +105,9 @@ def _save(settings, secrets):
         write_private(config.config_path(), text)
     if secrets:
         write_private(config.secrets_path(), json.dumps(kept, indent=2) + "\n")
-    names = sorted(settings) + sorted(secrets)
-    log.info("settings saved: %s", ", ".join(names) or "nothing changed")  # names only, never values
-    return names
+    # What changed, without a secret's name or value: the settings by name, the secrets only counted.
+    log.info("settings saved: %s; %d secret(s) changed", ", ".join(sorted(settings)) or "no settings", len(secrets))
+    return sorted(settings) + sorted(secrets)
 
 
 def _hint(value: str) -> str:

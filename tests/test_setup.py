@@ -470,7 +470,8 @@ class SettingsTests(WebCase):
             shown = self.call("/api/logs", cookie=self.token)[1]
         text = "\n".join(logs.output) + json.dumps(shown)
         self.assertNotIn(SECRET, text)
-        self.assertIn("SONARR_API_KEY", text)  # the name is logged, as what changed
+        self.assertNotIn("SONARR_API_KEY", text)  # not even a secret's name
+        self.assertIn("1 secret(s) changed", text)
 
     def test_the_environment_wins_and_says_so(self):
         self.save({"secrets": {"SONARR_API_KEY": SECRET}})
