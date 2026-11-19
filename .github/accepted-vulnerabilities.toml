@@ -14,36 +14,21 @@
 # expires = 2030-12-31
 
 [[accepted]]
-id = "CVE-2025-15367"
-reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
-
-[[accepted]]
-id = "CVE-2026-103995"
-reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
-
-[[accepted]]
-id = "CVE-2026-116566"
-reason = "Fixed only in Python 3.15 and 3.16; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
-
-[[accepted]]
 id = "CVE-2026-115559"
-reason = "Fixed only in Python 3.16 and later; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
+reason = "Fixed only in Python 3.16 and later; the image runs Python 3.15, and no way to reach it through Usher is known."
+expires = 2027-10-31
 
 [[accepted]]
 id = "CVE-2026-115791"
-reason = "Fixed only in Python 3.16 and later; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
+reason = "Fixed only in Python 3.16 and later; the image runs Python 3.15, and no way to reach it through Usher is known."
+expires = 2027-10-31
 
 [[accepted]]
 id = "CVE-2026-124249"
-reason = "Fixed only in Python 3.16 and later; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
+reason = "Fixed only in Python 3.16 and later; the image runs Python 3.15, and no way to reach it through Usher is known."
+expires = 2027-10-31
 
 [[accepted]]
 id = "CVE-2026-19552"
-reason = "Fixed only in Python 3.16 and later; Usher stays on 3.13, and no way to reach it through Usher is known."
-expires = 2027-02-18
+reason = "Fixed only in Python 3.16 and later; the image runs Python 3.15, and no way to reach it through Usher is known."
+expires = 2027-10-31

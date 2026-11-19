@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.1.6]
+
+### Changed
+- The server image now runs on Python 3.15; update the server to receive it.
+
 ## [1.1.4]
 
 ### Security

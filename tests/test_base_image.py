@@ -75,6 +75,16 @@ class BaseImageTests(unittest.TestCase):
             with self.subTest(workflow=name):
                 self.assertIn(f'python-version: "{minor}"', text)
 
+    def test_the_weekly_next_python_step_is_the_minor_after_the_images(self):
+        """Once a pre-release of the next minor exists the weekly run tries it; until then the step is removed."""
+        major, minor = base_minor(self.dockerfile).split(".")
+        text = (ROOT / ".github" / "workflows" / "weekly-checks.yml").read_text(encoding="utf-8")
+        step = re.search(r"- name: Next Python\n(.*?)(?=\n      - run:)", text, re.S)
+        if step is None:
+            return
+        self.assertIn(f'python-version: "{major}.{int(minor) + 1}"', step.group(1))
+        self.assertIn("allow-prereleases: true", step.group(1))
+
 
 if __name__ == "__main__":
     unittest.main()

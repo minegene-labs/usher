@@ -1,6 +1,6 @@
 # Usher: standard library Python, plus cryptography for Web Push.
-# Base image: Python 3.13. A comment can't follow FROM on the same line: Docker reads it as arguments.
-FROM python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+# Base image: Python 3.15. A comment can't follow FROM on the same line: Docker reads it as arguments.
+FROM python:3.15-slim@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 # The base image can lag Debian's security fixes for zlib; take the fixed package at build time. A build that reuses
 # this cached layer keeps the earlier zlib until the layer is rebuilt. Remove the step once a base image digest carries the fix.
