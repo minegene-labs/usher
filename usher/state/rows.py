@@ -4,7 +4,7 @@ import time
 
 from ..releases import import_reason, title_matches
 from ..titles import arr_art, jf_art
-from .helpers import READY_WINDOW, STALLED_AFTER, couldnt_find_after, episode_label, hms_seconds, iso, parse_time, utcnow
+from .helpers import READY_WINDOW, STALLED_AFTER, couldnt_find_after, episode_label, episode_subtitle, hms_seconds, iso, parse_time, utcnow
 
 
 class Rows:
@@ -80,9 +80,7 @@ class Rows:
                 eps = sorted({(e.get("episode") or {}).get("seasonNumber", 0) * 1000 + (e.get("episode") or {}).get("episodeNumber", 0) for e in g["recs"]})
                 if len(eps) == 1:
                     ep = rec.get("episode") or {}
-                    subtitle = episode_label(ep.get("seasonNumber"), ep.get("episodeNumber"))
-                    if ep.get("title"):
-                        subtitle += f" · {ep['title']}"
+                    subtitle = episode_subtitle(ep.get("seasonNumber"), ep.get("episodeNumber"), ep.get("title"))
                 else:
                     seasons = sorted({e // 1000 for e in eps})
                     subtitle = f"Season {seasons[0]} · {len(eps)} episodes" if len(seasons) == 1 else f"{len(eps)} episodes"
@@ -238,7 +236,7 @@ class Rows:
                     "kind": "episode",
                     "id": it.get("Id"),
                     "title": it.get("SeriesName", "TV show"),
-                    "subtitle": episode_label(it.get("ParentIndexNumber"), it.get("IndexNumber")) + (f" · {it['Name']}" if it.get("Name") else ""),
+                    "subtitle": episode_subtitle(it.get("ParentIndexNumber"), it.get("IndexNumber"), it.get("Name")),
                     "art": jf_art(sid, it.get("SeriesPrimaryImageTag")),
                     "added": iso(created),
                     "count": 1,

@@ -6,9 +6,11 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from .push import Vapid, deliver
+from .state.helpers import episode_label
 
 log = logging.getLogger("usher.notify")
 
+HOLD_NUMBERS_FOR = 15 * 60  # a new episode without its season and episode number waits this long for them
 SERVER_BAD_FOR = 30 * 60  # the server must be unhappy this long before anyone is told
 
 
@@ -40,11 +42,14 @@ class Notifier:
         self.pool = ThreadPoolExecutor(max_workers=2)
         self._server_bad_since = None
         self._recent_ready: dict = {}  # title -> when a request's "ready" was sent, to avoid a second ping
+        self._held: dict = {}  # media server item id -> when it was first seen without its season or episode number
 
     # deciding ------------------------------------------------------------------------
     def check(self, snap, raw):
         try:
             events = self._events(snap, raw)
+            for e in events:
+                log.info("notification built: %s: %s", e["kind"], e["title"])
             self._dispatch(events, snap.get("home") or [])
         except Exception:  # notifications must never stop the poller
             log.exception("notification check failed")
@@ -54,6 +59,14 @@ class Notifier:
             return False
         self.store.mark(key)
         return True
+
+    def _waiting_for_numbers(self, it, now):
+        """A new episode Jellyfin lists without both numbers is held for the next poll, so the notification can carry
+        them; it is only announced without them once it has waited HOLD_NUMBERS_FOR."""
+        if it.get("Type") != "Episode" or (it.get("ParentIndexNumber") is not None and it.get("IndexNumber") is not None):
+            return False
+        first = self._held.setdefault(it.get("Id"), now)
+        return now - first < HOLD_NUMBERS_FOR
 
     def _events(self, snap, raw):
         now = time.time()
@@ -84,9 +97,11 @@ class Notifier:
             self.store.mark("init:jellyfin")
         else:
             groups: dict = {}
+            self._held = {k: v for k, v in self._held.items() if k in {it.get("Id") for it in jf_items}}
             for it in jf_items:
-                if not self._new(f"jf:{it.get('Id')}"):
+                if self.store.seen(f"jf:{it.get('Id')}") or self._waiting_for_numbers(it, now):
                     continue
+                self.store.mark(f"jf:{it.get('Id')}")
                 name = it.get("SeriesName") if it.get("Type") == "Episode" else it.get("Name")
                 if not name or name.lower() in busy:
                     continue
@@ -94,7 +109,8 @@ class Notifier:
             for name, items in groups.items():
                 if len(items) == 1 and items[0].get("Type") == "Episode":
                     it = items[0]
-                    title = f"{name} S{it.get('ParentIndexNumber', 0)}E{it.get('IndexNumber', 0)} is ready to watch"
+                    label = episode_label(it.get("ParentIndexNumber"), it.get("IndexNumber"))
+                    title = f"{name} {label} is ready to watch" if label else f"{name} is ready to watch"
                 elif len(items) == 1:
                     title = f"{name} is ready to watch"
                 else:

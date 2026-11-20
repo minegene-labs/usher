@@ -5,7 +5,7 @@ from datetime import timedelta
 from .. import tidy
 from ..cache import MISSING
 from ..titles import arr_art
-from .helpers import episode_label, iso, utcnow
+from .helpers import episode_subtitle, iso, utcnow
 
 
 class Lists:
@@ -117,7 +117,7 @@ class Lists:
                         "id": ep.get("seriesId"),
                         "when": ep.get("airDateUtc"),
                         "title": series.get("title", "TV show"),
-                        "subtitle": episode_label(ep.get("seasonNumber"), ep.get("episodeNumber")) + (f" · {ep['title']}" if ep.get("title") else ""),
+                        "subtitle": episode_subtitle(ep.get("seasonNumber"), ep.get("episodeNumber"), ep.get("title")),
                         "here": ep.get("hasFile", False),
                         "art": arr_art("show", {**series, "id": ep.get("seriesId")}),
                     }

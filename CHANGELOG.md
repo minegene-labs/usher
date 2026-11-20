@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.6]
+
+### Fixed
+- A new episode is no longer announced or listed as "S0E0" when its season or episode number isn't known yet. Usher waits a few minutes for the numbers, and if they never arrive it shows the show and episode name without them.
+
 ## [1.4.5]
 
 ### Fixed

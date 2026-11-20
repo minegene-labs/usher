@@ -4,6 +4,7 @@ import logging
 import time
 
 from ..titles import jf_art
+from .helpers import episode_subtitle
 
 log = logging.getLogger("usher.state")
 
@@ -46,7 +47,7 @@ class MediaServer:
             series_art = jf_art(it.get("SeriesId") or it["Id"], it.get("SeriesPrimaryImageTag") or tags.get("Primary"), "Primary")
             if kind == "Episode":
                 title = it.get("SeriesName", "")
-                sub = f"S{it.get('ParentIndexNumber', 0)}E{it.get('IndexNumber', 0)}" + (f" · {it['Name']}" if it.get("Name") else "")
+                sub = episode_subtitle(it.get("ParentIndexNumber"), it.get("IndexNumber"), it.get("Name"))
                 art = jf_art(it["Id"], tags.get("Primary"), "Primary") if wide else series_art
             else:
                 title = it.get("Name", "")

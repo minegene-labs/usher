@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from . import __version__, config
 from .cache import TTLCache
 from .clients import ApiError
+from .state.helpers import episode_label
 
 STARTED = time.time()
 
@@ -150,7 +151,7 @@ class Diagnostics:
                 continue
             what = np.get("Name", "")
             if np.get("SeriesName"):
-                what = f"{np['SeriesName']} S{np.get('ParentIndexNumber', 0)}E{np.get('IndexNumber', 0)}"
+                what = " ".join(p for p in (np["SeriesName"], episode_label(np.get("ParentIndexNumber"), np.get("IndexNumber"))) if p)
             ps = s.get("PlayState") or {}
             pos, total = ps.get("PositionTicks") or 0, np.get("RunTimeTicks") or 0
             pct = f", {int(pos / total * 100)}%" if total else ""

@@ -45,7 +45,15 @@ def local_time(ts):
 
 
 def episode_label(season, number):
-    return f"S{int(season or 0)}E{int(number or 0)}"
+    """S1E2, or "" when either number is missing: a number nobody gave is never shown as 0 (a real season 0 is)."""
+    if season is None or number is None:
+        return ""
+    return f"S{int(season)}E{int(number)}"
+
+
+def episode_subtitle(season, number, name=None):
+    """An episode's row subtitle: its label and name, whichever of them there is."""
+    return " · ".join(p for p in (episode_label(season, number), name) if p)
 
 
 def hms_seconds(s):
