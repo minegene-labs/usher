@@ -112,11 +112,11 @@ export const Settings = (Base) => class extends Base {
       this.notifySection(),
       h("div", { class: "group-head" }, h("h3", {}, "Open titles in")),
       h("div", { class: "list" }, this.openInRow()),
-      this.connectRow());
+      this.connectShortcutRow());
   }
 
   // One tap installs the Shortcut the Connect button runs. Only offered on iPhone and iPad, and only when the server has a link for it.
-  connectRow() {
+  connectShortcutRow() {
     const link = away.installLink(store.me);
     if (!link || !push.ios()) return null;
     return [h("div", { class: "group-head" }, h("h3", {}, "Away from home")),

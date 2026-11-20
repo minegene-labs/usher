@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.5]
+
+### Fixed
+- Settings opens again from the account button on Status. It failed to draw because two screens shared a name, so the "Add the Connect shortcut" row broke the whole screen.
+
 ## [1.4.4]
 
 ### Fixed

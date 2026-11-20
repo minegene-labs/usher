@@ -3,6 +3,7 @@ sidebar's footer. Its back button returns to Status, a live update leaves it alo
 "the Settings app" so the two aren't confused."""
 
 import json
+import re
 import shutil
 import subprocess
 import unittest
@@ -69,10 +70,26 @@ console.log(JSON.stringify(out));
 """
 
 
-def run_app(steps):
-    """Runs the shell with the Settings and Changelog screens in Node; `steps` fills `out`, which comes back."""
-    names = ("shell", "settings", "changelog", "data")
-    script = HARNESS % {**{name: (WEB / f"{name}.js").as_uri() for name in names}, "steps": steps}
+STUBS = """  notifySection() { return new El("div"); }
+  advancedSection() { const d = new El("details"); d.kids.push(heading("h2", "Advanced")); return d; }
+  updatesRow() { return new El("div"); }
+"""
+REAL_IMPORTS = """const { Notify } = await import("%(notify)s");
+const { Advanced } = await import("%(advanced)s");
+const { Updates } = await import("%(updates)s");
+const { Connect } = await import("%(connect)s");
+"""
+
+
+def run_app(steps, real=False):
+    """Runs the shell with the Settings and Changelog screens in Node; `steps` fills `out`, which comes back.
+    With `real`, Settings is drawn with the app's real Notifications, Updates, Advanced and Connect screens, not stubs."""
+    names = ("shell", "settings", "changelog", "data", "notify", "advanced", "updates", "connect")
+    harness = HARNESS
+    if real:
+        harness = harness.replace(STUBS, "").replace("Shell(Changelog(Settings(Base)))", "Shell(Changelog(Connect(Settings(Notify(Advanced(Updates(Base)))))))")
+        harness = harness.replace("const { store }", REAL_IMPORTS + "const { store }")
+    script = harness % {**{name: (WEB / f"{name}.js").as_uri() for name in names}, "steps": steps}
     run = subprocess.run(["node", "--input-type=module"], input=script, capture_output=True, text=True, timeout=30)
     if run.returncode:
         raise AssertionError(run.stderr)
@@ -153,6 +170,31 @@ app.show("/status", false);   // what the browser's back does
 out.backToStatus = { current: app.current, stack: app.pushed, title: document.title };
 """
 
+REAL_SECTIONS = """
+Object.defineProperty(globalThis, "navigator", { configurable: true, value: { userAgent: "iPhone", platform: "iPhone", maxTouchPoints: 5,
+  standalone: true, serviceWorker: { ready: new Promise(() => {}) } } });
+globalThis.PushManager = class {};
+globalThis.Notification = { permission: "default" };
+globalThis.fetch = () => Promise.reject(new Error("offline"));
+store.me.connectShortcut = "https://example.test/shortcut";
+const openSettings = () => {
+  app.show("/status", false);
+  let account = null;
+  walk(navbar(), (n) => { if (n.attrs?.["aria-label"]?.endsWith("opens Settings")) account = n; });
+  account.on.click();
+  return app.pushed.slice();
+};
+out.first = openSettings();
+app.popScreen();
+app.notifyLast = { data: { prefs: { ready: true, problem: false, space: true, server: false }, devices: [{ endpoint: "e" }] }, here: true };
+out.second = openSettings();
+out.heads = [];
+walk(content(), (n) => { if (n.tag === "h2" || n.tag === "h3") out.heads.push(words(n)); });
+let shortcut = false;
+walk(content(), (n) => { if (words(n).trim() === "Add the Connect shortcut Connects Tailscale, then reopens Usher") shortcut = true; });
+out.shortcut = shortcut;
+"""
+
 
 @unittest.skipUnless(shutil.which("node"), "needs Node to run the client's code")
 class SettingsScreen(unittest.TestCase):
@@ -173,6 +215,13 @@ class SettingsScreen(unittest.TestCase):
         self.assertEqual(out["lastGroup"], {"text": "Sign out", "red": True})
         self.assertFalse(out["accountOnSettings"], "the account button is only on Status")
         self.assertEqual(out["backToStatus"], {"stack": [], "title": "Status · Usher"})
+
+    def test_settings_opens_with_the_real_sections_the_first_time_and_again_with_notifications_known(self):
+        out = run_app(REAL_SECTIONS, real=True)
+        self.assertEqual(out["first"], ["settings"], "a throw while drawing would leave Status showing")
+        self.assertEqual(out["second"], ["settings"])
+        self.assertEqual(out["heads"][:3], ["Account", "Device", "Notifications"])
+        self.assertTrue(out["shortcut"], "the Connect shortcut row, offered on iPhone when the server has a link")
 
 
 @unittest.skipUnless(shutil.which("node"), "needs Node to run the client's code")
@@ -197,6 +246,20 @@ class SettingsWaysIn(unittest.TestCase):
         self.assertIn(".navbar .nav-back", app_css)
         self.assertIn(".navbar .nav-action", app_css)
         self.assertNotIn(".nav-back", (WEB / "changelog.css").read_text(encoding="utf-8"))
+
+
+class ScreensKeepTheirMethodsApart(unittest.TestCase):
+    def test_no_two_screens_define_a_method_of_the_same_name(self):
+        """The screens are mixed into one class, so a later one silently replaces an earlier one's method of the same name."""
+        app = (WEB / "app.js").read_text(encoding="utf-8")
+        files = {m.group(1): m.group(2) for m in re.finditer(r'import \{ (\w+) \} from "\./(\w+)\.js"', app)}
+        listed = re.search(r"const screens = \[(.*?)\]", app).group(1).replace(" ", "").split(",")
+        seen = {}
+        for name in listed:
+            source = (WEB / f"{files[name]}.js").read_text(encoding="utf-8")
+            for method in re.findall(r"^  (?:async )?(\w+)\(.*\) \{$", source, re.M):
+                self.assertNotIn(method, seen, f"{method}() is defined in both {seen.get(method)} and {name}")
+                seen[method] = name
 
 
 class PhoneSettingsAreTheSettingsApp(unittest.TestCase):
