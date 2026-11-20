@@ -44,7 +44,7 @@ A Home Screen web app for your media server: search for a movie or show, tap **G
 - **Replaces stalled downloads** by itself with a healthier copy, and says so.
 - **Tidy up** is a row in Status → Storage that says how many watched titles it can free; it lists watched movies and seasons to remove, biggest first. **Keep** takes a title off the list, and **Kept titles** puts it back.
 - **Status** shows at a glance whether everything is working: the summary, Health and Storage (side by side on iPad and Mac, one column on a phone or with larger text). **Settings** (the round account button with your initials at the top right of Status, or on iPad and Mac the "Signed in as …" button at the bottom of the sidebar) holds your account, this device's notifications and Open titles in, signed-in devices, About and Sign out.
-- **Notifications** by Web Push, per person (Settings → Device).
+- **Notifications** by Web Push, per person (Settings → Device). Where they can't work, the same place says why and what to do.
 - **Updates**: Settings → About → Updates says whether the server is keeping up with new versions: Up to date, Update waiting, Held (a newer version needs a step on the server first), Last update rolled back, or Can't tell when the server hasn't reported for over an hour.
 - **Changelog**: Settings → About → Changelog lists what changed in every version that changed something you would notice, newest first. Nothing pops up after an update.
 - **Family-friendly folders** (optional): titles with a family rating are filed apart automatically.

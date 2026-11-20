@@ -14,6 +14,13 @@ export const push = {
     const raw = atob((b64 + "=".repeat((4 - (b64.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/"));
     return Uint8Array.from(raw, (c) => c.charCodeAt(0));
   },
+  // Why notifications can't work here, or null when they can. A page on a plain http:// address (other than this
+  // computer) gets no service worker at all, so it is checked first: adding to the Home Screen wouldn't fix it.
+  problem() {
+    if (window.isSecureContext === false) return "insecure";
+    if (push.supported() && (!push.ios() || push.installed())) return null;
+    return push.ios() && !push.installed() ? "install" : "unsupported";
+  },
   tz: () => -new Date().getTimezoneOffset(),
 };
 

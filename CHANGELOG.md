@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.2]
+
+### Fixed
+- In Settings → Device, the Notifications area now says why notifications can't be turned on (an address that isn't https://, or a browser without notification support) and what to do, instead of always pointing to the Home Screen.
+
 ## [1.4.1]
 
 ### Fixed

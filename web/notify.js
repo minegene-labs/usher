@@ -4,6 +4,13 @@ import { h } from "./dom.js";
 import { fill } from "./util.js";
 import { push } from "./device.js";
 
+// What is wrong and the one step that fixes it, for each reason push.problem() can give.
+const PROBLEMS = {
+  insecure: ["Notifications need a secure address", "This browser only allows notifications on addresses that start with https://. Open Usher from its https:// address, then come back here."],
+  install: ["Add Usher to your Home Screen first", "On iPhone and iPad, notifications only work from the Home Screen app. In Safari, tap Share, then Add to Home Screen, and open Usher from there."],
+  unsupported: ["This browser can't show notifications", "Open Usher in an up-to-date version of Safari, Chrome, Edge or Firefox, or update this device, then come back here."],
+};
+
 export const Notify = (Base) => class extends Base {
   // ---- notification settings ------------------------------------------------------------------
   notifySection() {
@@ -17,10 +24,11 @@ export const Notify = (Base) => class extends Base {
   }
 
   async fillNotify(body) {
-    if (!push.supported() || (push.ios() && !push.installed())) {
+    const problem = push.problem();
+    if (problem) {
+      const why = PROBLEMS[problem];
       body.replaceChildren(h("div", { class: "list" }, h("div", { class: "row" }, h("span", {}), h("div", { class: "text" },
-        h("div", { class: "title" }, "Add Usher to your Home Screen first"),
-        h("div", { class: "sub wrap" }, "On iPhone and iPad, notifications only work from the Home Screen app. In Safari, tap Share, then Add to Home Screen, and open Usher from there.")), h("span", {}))));
+        h("div", { class: "title" }, why[0]), h("div", { class: "sub wrap" }, why[1])), h("span", {}))));
       return;
     }
     let data, sub;
@@ -82,7 +90,7 @@ export const Notify = (Base) => class extends Base {
 
   // Shown on a request's journey: a one-tap way to be told when it's ready.
   notifyPrompt() {
-    if (this.promptDismissed || !push.supported() || (push.ios() && !push.installed()) || Notification.permission !== "default") return null;
+    if (this.promptDismissed || push.problem() || Notification.permission !== "default") return null;
     return h("div", { class: "prompt" },
       h("div", { class: "title" }, "Want a notification when it's ready?"),
       h("div", { class: "actions-row" },
