@@ -5,7 +5,7 @@ The terms used in Usher's code, comments, docs and issues. Use these rather than
 | Term | Means |
 | --- | --- |
 | **Server** | The Usher backend (`usher/`): the Python process that talks to the integrations and serves the web client. |
-| **Web client** / **PWA** | The Home Screen app (`web/`) people open on their phone, tablet or computer. |
+| **Web client** / **PWA** | The web app (`web/`) people open in a browser. |
 | **Integrations** | The services Usher talks to: the PVRs, the indexer manager, the download client and the media server. |
 | **PVRs** | Sonarr (TV shows) and Radarr (movies), which decide what to fetch and file it in the library. |
 | **Indexer manager** | Prowlarr, which supplies the PVRs with indexers to search. |

@@ -1,37 +1,37 @@
 # Usher
 
-A Home Screen web app for your media server: search for a movie or show, tap **Get it**, and follow it live from *Asked* to *Ready to watch*, without opening Sonarr, Radarr, Prowlarr or Transmission. Built for Safari on iPhone, iPad and Mac, in plain language.
+A web app for your media server: search for a movie or show, tap **Get it**, and follow it live from *Asked* to *Ready to watch*, without opening Sonarr, Radarr, Prowlarr or Transmission. Written in plain language.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-search-dark.png">
-    <img src="docs/images/phone-search-light.png" alt="Search on a phone: the search box and filters, with Discover's rows of trending and popular titles below, each with a plain placeholder poster" width="250">
+    <img src="docs/images/phone-search-light.png" alt="Search on a narrow screen: the search box and filters, with Discover's rows of trending and popular titles below, each with a plain placeholder poster" width="250">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-journey-dark.png">
-    <img src="docs/images/phone-journey-light.png" alt="A request's journey on a phone: Asked and Found are done, the show is downloading with a progress bar and the time left, then Getting it ready and Ready to watch" width="250">
+    <img src="docs/images/phone-journey-light.png" alt="A request's journey on a narrow screen: Asked and Found are done, the show is downloading with a progress bar and the time left, then Getting it ready and Ready to watch" width="250">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-downloads-dark.png">
-    <img src="docs/images/phone-downloads-light.png" alt="Downloads on a phone: a show someone just asked for with its progress, two more downloads with their progress and one waiting to start" width="250">
+    <img src="docs/images/phone-downloads-light.png" alt="Downloads on a narrow screen: a show someone just asked for with its progress, two more downloads with their progress and one waiting to start" width="250">
   </picture>
 </p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-status-dark.png">
-    <img src="docs/images/phone-status-light.png" alt="Status on a phone: a card saying everything is working, then Health for each part of the setup and Storage below it" width="250">
+    <img src="docs/images/phone-status-light.png" alt="Status on a narrow screen: a card saying everything is working, then Health for each part of the setup and Storage below it" width="250">
   </picture>
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/phone-settings-dark.png">
-    <img src="docs/images/phone-settings-light.png" alt="Settings on a phone: the account, then the notification choices for this device" width="250">
+    <img src="docs/images/phone-settings-light.png" alt="Settings on a narrow screen: the account, then the notification choices for this device" width="250">
   </picture>
 </p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/ipad-status-dark.png">
-    <img src="docs/images/ipad-status-light.png" alt="Status on an iPad: the sidebar on the left, with Health and Storage side by side and a card saying everything is working" width="700">
+    <img src="docs/images/ipad-status-light.png" alt="Status on a wide screen: the sidebar on the left, with Health and Storage side by side and a card saying everything is working" width="700">
   </picture>
 </p>
 
@@ -43,7 +43,7 @@ A Home Screen web app for your media server: search for a movie or show, tap **G
 - **Downloads**: everything you asked for, from asked to ready to watch, with live progress and a badge for what is new since you last opened the tab: a new request, a finished one or a problem.
 - **Replaces stalled downloads** by itself with a healthier copy, and says so.
 - **Tidy up** is a row in Status → Storage that says how many watched titles it can free; it lists watched movies and seasons to remove, biggest first. **Keep** takes a title off the list, and **Kept titles** puts it back.
-- **Status** shows at a glance whether everything is working: the summary, Health and Storage (side by side on iPad and Mac, one column on a phone or with larger text). **Settings** (the round account button with your initials at the top right of Status, or on iPad and Mac the "Signed in as …" button at the bottom of the sidebar) holds your account, this device's notifications and Open titles in, signed-in devices, About and Sign out.
+- **Status** shows at a glance whether everything is working: the summary, Health and Storage (side by side on a wide screen, one column on a narrow screen or with larger text). **Settings** (the round account button with your initials at the top right of Status, or on a wide screen the "Signed in as …" button at the bottom of the sidebar) holds your account, this device's notifications and Open titles in, signed-in devices, About and Sign out.
 - **Notifications** by Web Push, per person (Settings → Device). Where they can't work, the same place says why and what to do.
 - **Updates**: Settings → About → Updates says whether the server is keeping up with new versions: Up to date, Update waiting, Held (a newer version needs a step on the server first), Last update rolled back, or Can't tell when the server hasn't reported for over an hour.
 - **Changelog**: Settings → About → Changelog lists what changed in every version that changed something you would notice, newest first. Nothing pops up after an update.
@@ -77,7 +77,6 @@ Usher is checked every week against the latest release of each integration, and 
 1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up auto-deploy and covers upgrading. To run the published image from one Compose file instead, follow [Running the published image](deploy/README.md#running-the-published-image), which has its own steps for settings and the first account; steps 2 and 3 below are for the install folder.
 2. Copy [deploy/usher.example.toml](deploy/usher.example.toml) to `config/usher.toml` in the install folder and set at least `media_server.user_id` (`sudo usher-user ids` lists the IDs). Every key is in [docs/configuration.md](docs/configuration.md).
 3. Add an account: `sudo usher-user add <name> [Display Name]`. A new Usher with no accounts also prints a setup code in its log: open its address, enter the code and create the first account there. The next step connects each app: enter its address and key, press Test, and Usher says whether that version is supported.
-4. Open Usher's address on a phone and use Share → Add to Home Screen.
 
 ## Documentation
 

@@ -61,7 +61,7 @@ If one is missing, Docker Compose refuses to start Usher and names it.
 1. Point your reverse proxy's address for Usher at `127.0.0.1:8484` (with Caddy: `reverse_proxy 127.0.0.1:8484`), and put the same address in `server.origin` in `usher.toml`.
 2. `sudo usher-user ids` lists the Jellyfin accounts and quality profiles by ID. Put the viewing account in `media_server.user_id` and the profiles in `pvr.tv.quality_profile_id` and `pvr.movies.quality_profile_id`.
 3. `sudo usher-user config check`, then `cd /opt/usher && sudo docker compose restart`.
-4. Open the address on a phone, sign in, and **Add to Home Screen**. `curl -s 127.0.0.1:8484/healthz` on the server lists anything that still needs fixing.
+4. `curl -s 127.0.0.1:8484/healthz` on the server lists anything that still needs fixing.
 
 ## Auto-deploy
 
