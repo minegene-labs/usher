@@ -9,10 +9,11 @@ tests/test_merge_report.py has the cases.
 - `image` finished: when it failed, the version's container image may not be published or attested.
 - The version in usher/__init__.py is released, tagged at the merge commit. A merge that changes only documentation,
   `.claude/` or `.github/` files ships nothing, so it needs no new version: an earlier release is fine.
-- `stable` is at the merge commit (or past it, when a later merge was released since).
-- A merge that `stable` is already past (a later merge was released while its Tests run waited) is reported as
-  information: its promote job, refused by the fast-forward push, and its version, released at the later commit,
-  aren't counted against it, so no problem issue is opened. Every other check still counts.
+- `stable` is at the merge commit, or past it when a later merge was released since (information).
+- A merge that is superseded, with `stable` past it and its version released at a later commit (a later merge was
+  released while its Tests run waited, so promote's fast-forward push was refused), is reported as information: its
+  promote job and its version aren't counted against it, so no problem issue is opened. Without both signs they count,
+  and every other check still counts.
 - Every issue the description fixes (`Fixes #<n>`) is closed.
 - Which changed files need a person's eye (workflows, Dockerfile, deploy/, .claude/, web/sw.js, web/data.js): shown,
   never a problem by itself. A change to web/sw.js that only moves its version line isn't shown.
@@ -69,9 +70,10 @@ def issue_list(numbers):
 
 
 def superseded(merge):
-    """Whether `stable` is already past the merge commit: a later merge was released while this one's Tests run
-    waited, so promote's fast-forward push was refused and the version went out at the later commit."""
-    return merge["stable"] == "ahead"
+    """Whether a later merge was released while this one's Tests run waited: `stable` is past the merge commit and the
+    merge's version is released at a commit after it. `stable` alone isn't enough: a promote that moved `stable` and
+    then failed before releasing the version looks the same until a later merge goes past it."""
+    return merge["stable"] == "ahead" and merge["released_later"]
 
 
 def check_promote(merge):
@@ -108,10 +110,8 @@ def check_version(merge):
         return "info", f"Version {version} was released before: Dependabot's updates keep the version."
     if tagged and ships_nothing(merge["files"]):
         return "ok", f"Version {version} was released before: this merge changes no app code, so no release needed."
-    if superseded(merge) and tagged:
-        return "info", f"Version {version} was released at a later commit: a later merge was released since."
     if superseded(merge):
-        return "info", f"Version {version} has no release of its own: a later merge was released since."
+        return "info", f"Version {version} was released at a later commit: a later merge was released since."
     if tagged:
         return "problem", f"Version {version} was already released at an earlier commit: the version wasn't bumped."
     return "problem", f"Version {version} has no release."
@@ -232,6 +232,7 @@ def collect(api, sha, promote="success", now=None, image="success"):
         tagged = api.get(f"commits/v{version}")
         release_commit = tagged["sha"] if tagged else None
     compare = api.get(f"compare/{sha}...stable")
+    later = api.get(f"compare/{sha}...{release_commit}") if release_commit and release_commit != sha else None
     issues = {}
     for n in fixed_issues(body):
         issue = api.get(f"issues/{n}")
@@ -246,6 +247,7 @@ def collect(api, sha, promote="success", now=None, image="success"):
         "body": body,
         "version": version,
         "release_commit": release_commit,
+        "released_later": bool(later) and later["status"] == "ahead",
         "stable": compare["status"] if compare else "missing",
         "issues": issues,
         "files": [
