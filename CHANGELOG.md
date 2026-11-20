@@ -2,6 +2,11 @@
 
 All notable changes to Usher, newest first. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow the app's own numbering (minor for a feature, patch for a fix). Each release's full notes are on the Releases page.
 
+## [1.4.4]
+
+### Fixed
+- Tapping the account button on Status now always opens Settings. If Settings can't be drawn, Usher says so and stays on Status instead of ignoring every later tap.
+
 ## [1.4.2]
 
 ### Fixed

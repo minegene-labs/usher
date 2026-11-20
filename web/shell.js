@@ -218,10 +218,22 @@ export const Shell = (Base) => class extends Base {
     this.show(path, true);
   }
 
+  // If the screen can't be drawn, the stack and history go back to what they were: a stack that kept the name would make
+  // openSettings() ignore every later tap.
   pushScreen(name) {
+    const below = this.pushed;
     history.pushState({ pushed: [...this.pushed, name] }, "", "/status");
     this.pushed = [...this.pushed, name];
-    this.render(true);
+    try {
+      this.render(true);
+    } catch (e) {
+      console.error(`Couldn't draw ${name}`, e);
+      this.pushed = below;
+      history.back();
+      this.render(true);
+      this.toast(`Couldn't open ${PUSHED_TITLES[name]}.`);
+      return;
+    }
     this.main.scrollTo(0, 0);
   }
 
