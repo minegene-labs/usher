@@ -222,8 +222,17 @@ class TestAgainstFakes(Case):
                 self.assertLess(len(sent), 100)  # not read to the end (400); socket buffers hold some
 
     def test_a_transmission_reply_larger_than_the_cap_is_stopped(self):
-        handler = type("Huge", (Base,), {"do_POST": lambda self: self.reply(b"[" + b" " * (connect.MAX_REPLY + 10) + b"]")})
-        out = connect.test("transmission", serve(self, handler), TR_PASS, TR_USER)
+        class Huge(Base):
+            def do_POST(self):
+                # Read the request first: closing with it unread makes the OS reset the connection, which can
+                # discard part of the reply the client is still reading and turn the verdict into "unreachable".
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                try:
+                    self.reply(b"[" + b" " * (connect.MAX_REPLY + 10) + b"]")
+                except OSError:  # the client stops reading at the cap and closes while this is still writing
+                    pass
+
+        out = connect.test("transmission", serve(self, Huge), TR_PASS, TR_USER)
         self.assertEqual(out["verdict"], "other_app", out)
 
     def test_a_reply_that_never_ends_is_stopped_at_the_time_limit(self):
