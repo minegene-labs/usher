@@ -1,6 +1,7 @@
 """Which notifications fire, for whom, and when."""
 
 import tempfile
+import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -70,6 +71,24 @@ class NotifyTests(unittest.TestCase):
         new = old + [{"Id": "b", "Type": "Episode", "SeriesName": "Bluey", "ParentIndexNumber": 3, "IndexNumber": 2}]
         self.run_check(snap(), {"ready": new})
         self.assertEqual(self.sent[0][1]["title"], "Bluey S3E2 is ready to watch")
+
+    def test_unwatched_item_still_listed_after_60_days_is_not_announced_again(self):
+        old = [{"Id": "a", "Type": "Movie", "Name": "Old Film"}]
+        self.run_check(snap(), {"ready": old})
+        day = 86400
+        with mock.patch("usher.store.time.time", return_value=time.time() + 40 * day):
+            self.run_check(snap(), {"ready": old})  # seen again on day 40
+        with mock.patch("usher.store.time.time", return_value=time.time() + 61 * day):
+            new = old + [{"Id": "b", "Type": "Movie", "Name": "New Film"}]
+            self.run_check(snap(), {"ready": new})
+        self.assertEqual({m["title"] for _, m in self.sent}, {"New Film is ready to watch"})
+        self.assertTrue(self.store.seen("init:jellyfin"))
+
+    def test_first_run_marker_is_never_pruned(self):
+        self.run_check(snap(), {"ready": []})
+        with mock.patch("usher.store.time.time", return_value=time.time() + 400 * 86400):
+            self.store.mark("jf:other")
+        self.assertTrue(self.store.seen("init:jellyfin"))
 
     def test_episodes_of_a_request_in_progress_are_not_announced_separately(self):
         self.run_check(snap(), {"ready": []})

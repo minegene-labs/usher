@@ -100,7 +100,10 @@ class Notifier:
             groups: dict = {}
             self._held = {k: v for k, v in self._held.items() if k in {it.get("Id") for it in jf_items}}
             for it in jf_items:
-                if self.store.seen(f"jf:{it.get('Id')}") or self._waiting_for_numbers(it, now):
+                if self.store.seen(f"jf:{it.get('Id')}"):
+                    self.store.mark(f"jf:{it.get('Id')}")  # still listed: keep its entry so it isn't announced again
+                    continue
+                if self._waiting_for_numbers(it, now):
                     continue
                 self.store.mark(f"jf:{it.get('Id')}")
                 name = it.get("SeriesName") if it.get("Type") == "Episode" else it.get("Name")

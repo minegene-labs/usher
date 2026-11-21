@@ -348,8 +348,11 @@ class Store:
         return self.one("SELECT 1 FROM notified WHERE key = ?", (key,)) is not None
 
     def mark(self, key: str):
-        self.run("INSERT OR IGNORE INTO notified (key, at) VALUES (?, ?)", (key, int(time.time())))
-        self.run("DELETE FROM notified WHERE at < ?", (int(time.time()) - 60 * 86400,))
+        """Remember a key, or refresh its time when it is already there, so an item still being seen is never pruned.
+        Only entries nothing has refreshed for 60 days go, and the first-run markers (`init:`) stay."""
+        now = int(time.time())
+        self.run("INSERT INTO notified (key, at) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at", (key, now))
+        self.run("DELETE FROM notified WHERE at < ? AND key NOT LIKE 'init:%'", (now - 60 * 86400,))
 
     def purge_expired(self):
         now = int(time.time())
