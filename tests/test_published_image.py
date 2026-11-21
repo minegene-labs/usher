@@ -149,6 +149,24 @@ class DockerfileDataFolderTests(unittest.TestCase):
         self.assertLess(text.index("chown"), text.index("USER 1000"))  # root makes it, then the image drops to the user
 
 
+class ListensInsideTheContainerTests(unittest.TestCase):
+    """The image listens on all addresses so the published port reaches it; who can reach that port is the compose
+    file's decision, and a compose file that shares the host's network must not inherit the wide default."""
+
+    def test_the_image_listens_on_all_addresses_by_default(self):
+        self.assertRegex(DOCKERFILE.read_text(encoding="utf-8"), r"(?m)^    USHER_BIND=0\.0\.0\.0:8484$")
+
+    def test_the_published_compose_file_leaves_the_default_alone_and_publishes_on_loopback_only(self):
+        service = _service(COMPOSE.read_text(encoding="utf-8"))
+        self.assertNotIn("USHER_BIND", service)
+        self.assertEqual(re.findall(r'(?m)^      - "([^"]*:\d+:\d+)"$', service), ["127.0.0.1:8484:8484"])
+
+    def test_the_host_networked_install_keeps_loopback(self):
+        mine = (ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
+        self.assertIn("    network_mode: host\n", mine)
+        self.assertIn("      - USHER_BIND=127.0.0.1:8484\n", mine)
+
+
 class GenericComposeTests(unittest.TestCase):
     def setUp(self):
         self.text = COMPOSE.read_text(encoding="utf-8")

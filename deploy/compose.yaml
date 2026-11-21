@@ -14,6 +14,9 @@ services:
     env_file: [.env, site.env]
     environment:
       - USHER_CONFIG=/config/usher.toml
+      # host networking: the image's default of all addresses would open Usher to the server's network, so keep the
+      # default of server.bind to the loopback address here (usher.toml can still set it)
+      - USHER_BIND=127.0.0.1:8484
     read_only: true
     tmpfs: [/tmp]
     cap_drop: [ALL]

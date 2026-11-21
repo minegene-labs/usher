@@ -8,14 +8,15 @@ Usher is meant for a household or small group: a handful of trusted people, one 
 
 ## Network exposure
 
-- Usher listens on `127.0.0.1` only; the reverse proxy is the one public door.
-- The container uses host networking so it can reach the integrations on the server's own loopback (`127.0.0.1`), where they listen and where nothing outside the server can reach them; a separate container network would need each of them opened to it.
-- That is safe here because Usher itself listens on `127.0.0.1` only, so host networking exposes no new port, and because the container's filesystem is read-only and all its capabilities are dropped.
+- Run from source or in the install folder, Usher listens on `127.0.0.1` only; the reverse proxy is the one public door.
+- The install folder's container uses host networking so it can reach the integrations on the server's own loopback (`127.0.0.1`), where they listen and where nothing outside the server can reach them; a separate container network would need each of them opened to it.
+- That is safe here because that compose file sets Usher to listen on `127.0.0.1` only, so host networking exposes no new port, and because the container's filesystem is read-only and all its capabilities are dropped.
+- The published image listens on all addresses inside its container, which a published port needs, and its compose file publishes the port on the host's `127.0.0.1` only, so that decides who can reach it. A compose file that publishes the port on every address, or shares the host's network, opens Usher to the network unless `server.bind` says otherwise.
 - Only the server talks to TMDb and the integrations. Devices contact nothing else: posters and logos come through Usher.
 
 ## What is in place
 
-- HTTPS only, through Caddy; Usher itself listens on `127.0.0.1`.
+- HTTPS only, through Caddy; Usher itself listens on `127.0.0.1` (in the published image, on all addresses inside the container, with the port published on the host's `127.0.0.1` only).
 - Passwords hashed with scrypt (N=2^15, r=8, p=1). Five failures lock an account for 15 minutes; 20 failures from one address in 15 minutes block that address.
 - Session cookie `__Host-usher`: 256-bit random, `Secure`, `HttpOnly`, `SameSite=Strict`, 90 days sliding. Only a SHA-256 of it is stored.
 - Every POST needs an exact `Origin` match; signed-in POSTs also need the CSRF token.

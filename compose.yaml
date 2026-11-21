@@ -3,7 +3,7 @@
 # this machine and never the Docker socket. See "Running the published image" in deploy/README.md.
 #   USHER_VERSION  the image version to run, for example 1.2.3; the newest when unset
 # Settings are in /data/usher.toml in the data volume (deploy/usher.example.toml lists every setting). Inside the
-# container Usher must listen on all addresses for the published port to reach it: set server.bind = "0.0.0.0:8484".
+# container Usher listens on all addresses by default, which the published port needs; leave server.bind out.
 # The host side of the port is 127.0.0.1 only, so other machines can't reach Usher until you put a reverse proxy or
 # Tailscale Serve in front of it.
 # Secrets (API keys, the Transmission password, the TMDb token) are never in the settings file: they come from a .env

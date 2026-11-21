@@ -8,9 +8,14 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends --only-upgrade zlib1g \
     && rm -rf /var/lib/apt/lists/*
 
+# USHER_BIND is only the default of server.bind (usher.toml still wins): inside a container Usher listens on all
+# addresses so a published port reaches it, and the compose file decides who can reach that port. A compose file that
+# shares the host's network must set USHER_BIND itself (deploy/compose.yaml does), or Usher would listen on the host's.
+
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    USHER_WEB=/app/web
+    USHER_WEB=/app/web \
+    USHER_BIND=0.0.0.0:8484
 
 WORKDIR /app
 COPY requirements.txt .

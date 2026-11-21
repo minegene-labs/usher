@@ -180,6 +180,37 @@ class DefaultTests(ConfigCase):
         self.assertIn("deploy/usher.example.toml", note)
 
 
+class BindInAContainerTests(ConfigCase):
+    """The published image sets USHER_BIND, which changes only where server.bind starts from."""
+
+    def test_the_container_default_is_used_when_usher_toml_has_no_bind(self):
+        self.write(toml_text({"media_server.user_id": USER_ID}))
+        with mock.patch.dict(os.environ, {"USHER_BIND": "0.0.0.0:8484"}):
+            s = config.load()
+        self.assertEqual((s.bind_host, s.bind_port), ("0.0.0.0", 8484))
+
+    def test_it_applies_when_there_is_no_file_yet(self):
+        with mock.patch.dict(os.environ, {"USHER_BIND": "0.0.0.0:8484"}):
+            self.assertEqual(config.get("server.bind"), "0.0.0.0:8484")
+
+    def test_usher_toml_wins_over_it(self):
+        self.write(toml_text({"server.bind": "127.0.0.1:9000", "media_server.user_id": USER_ID}))
+        with mock.patch.dict(os.environ, {"USHER_BIND": "0.0.0.0:8484"}):
+            s = config.load()
+        self.assertEqual((s.bind_host, s.bind_port), ("127.0.0.1", 9000))
+
+    def test_an_empty_variable_changes_nothing(self):
+        with mock.patch.dict(os.environ, {"USHER_BIND": " "}):
+            self.assertEqual(config.get("server.bind"), "127.0.0.1:8484")
+
+    def test_a_bad_variable_is_an_error_that_names_it(self):
+        with mock.patch.dict(os.environ, {"USHER_BIND": "everywhere"}):
+            with self.assertRaises(ConfigError) as e:
+                config.get("server.bind")
+        self.assertIn("USHER_BIND", str(e.exception))
+        self.assertIn("server.bind", str(e.exception))
+
+
 class OverrideTests(ConfigCase):
     def test_each_key_overrides_its_default(self):
         for name, value in OTHER.items():

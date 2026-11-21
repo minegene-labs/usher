@@ -70,7 +70,13 @@ KEYS = {
     k.name: k
     for k in (
         Key("server.origin", str, "", help="The address people open Usher at, e.g. https://usher.example.net"),
-        Key("server.bind", str, "127.0.0.1:8484", check=_bind, help="Address and port the server listens on"),
+        Key(
+            "server.bind",
+            str,
+            "127.0.0.1:8484",
+            check=_bind,
+            help="Address and port the server listens on; the published image listens on all addresses unless this says otherwise",
+        ),
         Key("server.data_dir", str, "/data", help="Where accounts, requests and settings are kept"),
         Key(
             "server.utc_offset_minutes",
@@ -274,13 +280,23 @@ def activate(source: Source | None):
     _active = source
 
 
+def _default(key: Key):
+    """A key's default. Only server.bind has a second one: USHER_BIND, which the container image sets so that the
+    published port reaches Usher inside it. usher.toml still wins, and a run outside a container keeps the key's own."""
+    override = _env("USHER_BIND") if key.name == "server.bind" else ""
+    if not override:
+        return key.default
+    return _checked(key, override, "the USHER_BIND environment variable")
+
+
 def get(name: str):
     """The value of a setting, e.g. get("storage.low_space_gb"); its default when usher.toml doesn't set it."""
     global _active
     key = KEYS[name]
     if _active is None:
         _active = read()
-    value = (_active.values or {}).get(name, key.default)
+    values = _active.values or {}
+    value = values[name] if name in values else _default(key)
     return list(value) if key.kind is list else value
 
 

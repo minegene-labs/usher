@@ -26,7 +26,7 @@ Secrets never go in `usher.toml`. A list is written `["a", "b"]`; a whole number
 | Key | Default | Means |
 | --- | --- | --- |
 | `server.origin` | (empty) | The address people open Usher at, e.g. https://usher.example.net |
-| `server.bind` | `"127.0.0.1:8484"` | Address and port the server listens on |
+| `server.bind` | `"127.0.0.1:8484"`; `"0.0.0.0:8484"` in the published image | Address and port the server listens on. The published image listens on all addresses, since a published port can't reach it otherwise; its compose file publishes the port on the host's `127.0.0.1` only, which decides who can reach it |
 | `server.data_dir` | `"/data"` | Where accounts, requests and settings are kept |
 | `server.utc_offset_minutes` | `0` | The server's time zone as minutes ahead of UTC, for times shown in Status and messages |
 | `server.session_days` | `90` | Days a device stays signed in |
