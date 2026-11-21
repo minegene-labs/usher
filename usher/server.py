@@ -484,7 +484,7 @@ def main():
     app.discover.start()
     app.releases.start()
     httpd = Server((settings.bind_host, settings.bind_port), Handler)
-    signal.signal(signal.SIGTERM, lambda *_: (app.state.stop(), app.wiring.stop(), sys.exit(0)))
+    signal.signal(signal.SIGTERM, lambda *_: (app.state.stop(), app.wiring.stop(), app.releases.stop(), sys.exit(0)))
     log.info("Usher %s listening on %s:%d", __version__, settings.bind_host, settings.bind_port)
     try:
         httpd.serve_forever()

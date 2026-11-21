@@ -4,6 +4,7 @@ Usher never installs anything: updating a container is the host's job. The check
 public API, sent only while `updates.check_releases` is "on". The last answer is kept in release.json so a restart
 doesn't ask again before a day has passed."""
 
+import http.client
 import json
 import logging
 import re
@@ -78,7 +79,7 @@ class ReleaseCheck:
         try:
             self.newest = self.fetch()
             self.failed = False
-        except (OSError, ValueError) as e:  # the message names the kind of failure, never a request or a reply
+        except (OSError, ValueError, http.client.HTTPException) as e:  # the message names the kind of failure, never a request or a reply
             log.warning("can't check for a newer release: %s", type(e).__name__)
             self.failed = True
         self.at = int(now if now is not None else time.time())

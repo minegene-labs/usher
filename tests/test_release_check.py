@@ -85,6 +85,15 @@ class ReleaseCheckTests(unittest.TestCase):
             self.assertTrue(check.check(now=T0 + 3600))
             self.assertFalse(check.view()["failed"])
 
+    def test_an_http_failure_mid_reply_counts_as_a_failed_check_not_an_endless_retry(self):
+        import http.client
+
+        with settings(), self.assertLogs("usher.releases", "WARNING"):
+            check = ReleaseCheck(self.dir, Fetch(http.client.IncompleteRead(b"")))
+            self.assertTrue(check.check(now=T0))
+            self.assertTrue(check.failed)
+            self.assertFalse(check.check(now=T0 + 60))
+
     def test_a_failed_check_keeps_the_last_known_release(self):
         with settings():
             check = ReleaseCheck(self.dir, Fetch("1.1.0", ValueError("bad")))
@@ -155,6 +164,19 @@ class AdminsAreToldOnceTests(unittest.TestCase):
             self.releases.check(now=T0 + 2 * DAY)
             self.poll()
             self.assertEqual(len(self.sent), 2)
+
+    def test_an_admin_with_the_switch_off_is_not_told_and_does_not_hold_it_up_for_a_new_admin(self):
+        self.store.set_prefs(1, {"server": 0})
+        with settings():
+            self.releases.check(now=T0)
+            self.poll()
+            self.assertEqual(self.sent, [])
+            self.store.add_user("kim", "Kim", "x")
+            self.store.run("UPDATE users SET admin = 1 WHERE username = 'kim'")
+            self.store.set_prefs(3, {"server": 1})
+            self.poll()
+            self.poll()
+            self.assertEqual(self.sent, [("kim", "A new version of Usher is out")])
 
     def test_nobody_is_told_when_the_check_is_off_or_nothing_is_newer(self):
         with settings("off"):
