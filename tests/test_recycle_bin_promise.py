@@ -111,3 +111,11 @@ class Wording(unittest.TestCase):
         self.assertEqual(self.out["emptyingMixed"], "emptied by itself after 7 to 14 days")
         self.assertEqual(self.out["emptyingNone"], "")
         self.assertEqual(self.out["emptyingForever"], "kept until you empty it")
+
+
+class ScreensUseIt(unittest.TestCase):
+    def test_no_screen_still_promises_seven_days(self):
+        for name in ("sheets.js", "storage.js"):
+            src = (WEB / name).read_text(encoding="utf-8")
+            self.assertNotIn("7 days", src, name)
+            self.assertIn("recycle.js", src, name)

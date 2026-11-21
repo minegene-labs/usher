@@ -5,7 +5,7 @@ const days = (n) => `${n} day${n === 1 ? "" : "s"}`;
 // The sentence in a Remove confirmation that says whether the files can be got back.
 export function afterRemoving(bin, app) {
   const p = bin?.[app];
-  if (!p) return "Usher couldn't check whether it can be got back, so assume it can't.";
+  if (!p) return "Usher couldn't check the recycle bin, so it may be deleted for good.";
   if (!p.on) return "It is deleted for good and can't be got back.";
   if (!p.days) return "It stays in the recycle bin until the recycle bin is emptied on the Status screen.";
   return `It goes to the recycle bin for ${days(p.days)}; to get the space back sooner, empty the recycle bin on the Status screen.`;
