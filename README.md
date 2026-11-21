@@ -53,7 +53,7 @@ A web app for your media server: search for a movie or show, tap **Get it**, and
 
 ## Requirements
 
-- A server with Linux and Docker with Docker Compose 2.20.2 or later. Usher runs from its published image, so nothing is built or compiled on the server. The optional install folder with a helper script needs a few more tools (listed in [deploy/README.md](deploy/README.md#requirements-for-the-install-folder)).
+- A server with Linux and Docker with Docker Compose 2.20.2 or later. Usher runs from its published image, so nothing is built or compiled on the server. The optional install folder with a helper script needs a few more tools (listed under Requirements for the install folder in [deploy/README.md](deploy/README.md#requirements-for-the-install-folder)).
 - Jellyfin, Sonarr, Radarr, Prowlarr and Transmission already running and reachable from the server.
 - A reverse proxy with HTTPS in front of Usher, such as Caddy. Usher listens on `127.0.0.1` only (the published image listens on all addresses inside its container, with its port published on `127.0.0.1` only).
 - A free TMDb token for Discover (optional).
@@ -74,8 +74,8 @@ Usher is checked every week against the latest release of each integration, and 
 
 ## Quick start
 
-1. Follow [Install](deploy/README.md#install): download [`compose.yaml`](compose.yaml), put the secrets in a `.env` file beside it, write `usher.toml` into the data volume (start from [deploy/usher.example.toml](deploy/usher.example.toml); every key is in [docs/configuration.md](docs/configuration.md)) and run `docker compose up -d --wait`. Only the published image and `compose.yaml` are used.
-2. Set at least `media_server.user_id` (`docker compose run --rm --no-deps usher python -m usher.cli ids` lists the IDs).
+1. Follow the six steps in [Install](deploy/README.md#install). In short: download [`compose.yaml`](compose.yaml), put the secrets in a `.env` file beside it, copy [deploy/usher.example.toml](deploy/usher.example.toml) to `usher.toml`, set its address (`server.origin`), the proxy address and your apps' addresses, remove its `server.bind` line, and copy it into the data volume. Only the published image and `compose.yaml` are used; every key is in [docs/configuration.md](docs/configuration.md).
+2. Look up the IDs with `docker compose run --rm --no-deps usher python -m usher.cli ids`, and set `media_server.user_id` and the two `quality_profile_id` keys. Then start it with `docker compose up -d --wait`.
 3. Add an account. A new Usher with no accounts prints a setup code in its log (`docker compose logs usher`): open its address, enter the code and create the first account there. Or: `docker compose exec usher python -m usher.cli add <name>`. The next step connects each app: enter its address and key, press Test, and Usher says whether that version is supported.
 
 Update with `docker compose pull && docker compose up -d`. A server that wants a helper script, accounts through `usher-user` and an optional daily update can use the [install folder](deploy/README.md#the-install-folder-optional) instead.

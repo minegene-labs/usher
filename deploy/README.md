@@ -4,7 +4,7 @@ How the operator installs Usher on a server from the published image and `compos
 
 ## Install
 
-This is the way to run Usher. Nothing is built on your machine. Each release, made by hand when enough changes have collected, publishes a container image for `linux/amd64` and `linux/arm64` at `ghcr.io/minegene-labs/usher`, tagged with the version and `latest`, with its build provenance attested. [`compose.yaml`](../compose.yaml) at the top of the repository runs it with nothing from the machine: the port on `127.0.0.1:8484` only, one named volume for Usher's data, the container's hardening described under Security model (non-root, read-only, no capabilities, memory and process limits), no remote parts and no Docker socket. It is separate from the install folder described further down, an optional way to run the same image with the host's network, the apps' own files, a helper script and an optional daily update.
+This is the way to run Usher. Nothing is built on your machine. Each release publishes a container image for `linux/amd64` and `linux/arm64` at `ghcr.io/minegene-labs/usher`, tagged with the version and `latest`, with its build provenance attested. [`compose.yaml`](../compose.yaml) at the top of the repository runs it with nothing from the machine: the port on `127.0.0.1:8484` only, one named volume for Usher's data, the container's hardening described under Security model (non-root, read-only, no capabilities, memory and process limits), no remote parts and no Docker socket. It is separate from the install folder described further down, an optional way to run the same image with the host's network, the apps' own files, a helper script and an optional daily update.
 
 1. Download `compose.yaml` into an empty folder and read it: `docker compose config` prints what it will run. To stay on one version, set `USHER_VERSION` (for example `USHER_VERSION=1.2.0`) in a `.env` file beside it.
 2. Put the secrets in that `.env` file, one per line: `JELLYFIN_API_KEY`, `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY`, `TR_PASS` and, for Discover, `TMDB_TOKEN`. Keep it readable by you alone.
@@ -19,12 +19,12 @@ This is the way to run Usher. Nothing is built on your machine. Each release, ma
    docker compose run --rm --no-deps -T --entrypoint sh usher -c 'cat > /data/usher.toml' < usher.toml
    ```
 4. `docker compose run --rm --no-deps usher python -m usher.cli ids` lists the Jellyfin accounts and the Sonarr and Radarr quality profiles by ID. Set `media_server.user_id` (required) and the two `quality_profile_id` keys in `usher.toml`, and copy it into the volume again.
-5. `docker compose up -d --wait`, then add the first account. With no account yet Usher prints a setup code (`docker compose logs usher`); open your address, enter the code and create the account on the Setup page. It becomes the admin, who can save settings and secrets in the app from then on. Or: `docker compose exec usher python -m usher.cli add <name>` asks for a password, as `usher-user add` does on the install above. Then sign in.
+5. `docker compose up -d --wait`, then add the first account. With no account yet Usher prints a setup code (`docker compose logs usher`); open your address, enter the code and create the account on the Setup page. It becomes the admin, who can save settings and secrets in the app from then on. Or: `docker compose exec usher python -m usher.cli add <name>` asks for a password, as `usher-user add` does in the install folder below. Then sign in.
 6. To update, `docker compose pull && docker compose up -d`; to go back, set the previous version in `USHER_VERSION` and run the same command. The data volume keeps accounts and requests. Settings → About → Updates says when a newer release is out.
 
 To check where an image came from, `gh attestation verify oci://ghcr.io/minegene-labs/usher:<version> --repo minegene-labs/usher` verifies its provenance.
 
-The steps above under Install are all most people need. The rest of this page is for an install folder set up with `setup.sh`, which adds a helper for accounts and updates; Building Usher from source is only for working on it (see Developing in the main README).
+The steps above under Install are all most people need. The next section is for an install folder set up with `setup.sh`, which adds a helper for accounts and updates; Security model and Upgrading cover both ways. Building Usher from source is only for working on it (see Developing in the main README).
 
 ## The install folder (optional)
 
@@ -113,7 +113,7 @@ Its lines are in the journal: `journalctl -t usher-update` (the timer's runs als
 - **What runs as root never arrives with an update.** `usher-update`, the timer and service units and `setup.sh` are installed by hand from `deploy/` and run from `/usr/local/bin` and `/etc/systemd/system`, so an update can't change what runs as root. A change to them waits for a person to run `setup.sh` again (see Upgrading).
 - **The container is locked down:** runs as 1000:1001, read-only filesystem, all capabilities dropped, `no-new-privileges`, memory and process limits. It mounts only its data, its settings, the three `config.xml` files read-only, and the recycle bin, and never the Docker socket.
 - **Secrets stay on the server,** in `.env` (root, 600), never in `usher.toml` or this repo.
-- What remains is trust in whoever can publish a release: they decide what the container runs (within the limits above), so keep write access to the repo to people you trust. Turning on the daily update extends that trust to every future release.
+- What remains is trust in whoever can publish a release: they decide what the container runs (within the limits in the list above), so keep write access to the repo to people you trust. Turning on the daily update extends that trust to every future release.
 
 ## Upgrading
 
