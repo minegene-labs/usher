@@ -45,7 +45,7 @@ A web app for your media server: search for a movie or show, tap **Get it**, and
 - **Tidy up** is a row in Status → Storage that says how many watched titles it can free; it lists watched movies and seasons to remove, biggest first. **Keep** takes a title off the list, and **Kept titles** puts it back.
 - **Status** shows at a glance whether everything is working: the summary, Health and Storage (side by side on a wide screen, one column on a narrow screen or with larger text). **Settings** (the round account button with your initials at the top right of Status, or on a wide screen the "Signed in as …" button at the bottom of the sidebar) holds your account, this device's notifications and Open titles in, signed-in devices, About and Sign out.
 - **Notifications** by Web Push, per person (Settings → Device). Where they can't work, the same place says why and what to do.
-- **Updates**: Settings → About → Updates says whether the server is keeping up with new versions: Up to date, Update waiting, Held (a newer version needs a step on the server first), Last update rolled back, or Can't tell when the server hasn't reported for over an hour. On an install that has no update script (the published image), Usher asks GitHub once a day for the newest release, so the row says Update available with a link to its notes and the command to update, ready to copy; Usher never installs an update itself. An admin turns the daily check off with `updates.check_releases` (no request is then made), and admins are told once about each new release.
+- **Updates**: Settings → About → Updates says whether the server is keeping up with new versions: Up to date, Update waiting, Held (a newer version needs a step on the server first), Last update rolled back, or Can't tell when the server hasn't reported for over two days. Unless the optional daily update on the server is turned on (and reporting in), Usher asks GitHub once a day for the newest release, so the row says Update available with a link to its notes and the command to update, ready to copy; Usher never installs an update itself. An admin turns the daily check off with `updates.check_releases` (no request is then made), and admins are told once about each new release.
 - **Changelog**: Settings → About → Changelog lists what changed in every version that changed something you would notice, newest first. Nothing pops up after an update.
 - **Family-friendly folders** (optional): titles with a family rating are filed apart automatically.
 - **Opens at once**: each screen shows its last copy straight away and refreshes in the background; artwork is kept on the device at the size it is shown, within a fixed limit, and the next screenful is fetched while the device is idle (never in Low Data Mode). Signing out deletes it all. See [docs/features.md](docs/features.md).
@@ -74,7 +74,7 @@ Usher is checked every week against the latest release of each integration, and 
 
 ## Quick start
 
-1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up auto-deploy and covers upgrading. To run the published image from one Compose file instead, follow [Running the published image](deploy/README.md#running-the-published-image), which has its own steps for settings and the first account; steps 2 and 3 below are for the install folder.
+1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up the optional daily update and covers updating and upgrading. To run the published image from one Compose file instead, follow [Running the published image](deploy/README.md#running-the-published-image), which has its own steps for settings and the first account; steps 2 and 3 below are for the install folder.
 2. Copy [deploy/usher.example.toml](deploy/usher.example.toml) to `config/usher.toml` in the install folder and set at least `media_server.user_id` (`sudo usher-user ids` lists the IDs). Every key is in [docs/configuration.md](docs/configuration.md).
 3. Add an account: `sudo usher-user add <name> [Display Name]`. A new Usher with no accounts also prints a setup code in its log: open its address, enter the code and create the first account there. The next step connects each app: enter its address and key, press Test, and Usher says whether that version is supported.
 
@@ -88,7 +88,7 @@ Usher is checked every week against the latest release of each integration, and 
 | [docs/security.md](docs/security.md) | Threat model, secrets, network exposure |
 | [docs/glossary.md](docs/glossary.md) | The words used here and in the code |
 | [docs/credits.md](docs/credits.md) | TMDB and JustWatch credits |
-| [deploy/README.md](deploy/README.md) | Installing, auto-deploy, upgrading |
+| [deploy/README.md](deploy/README.md) | Installing, updating, upgrading |
 | [SUPPORT.md](SUPPORT.md) | Where to ask a question and what to include |
 | [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md) | Changes, how to contribute, reporting a vulnerability |
 
@@ -97,7 +97,7 @@ Usher is checked every week against the latest release of each integration, and 
 | Command | Does |
 | --- | --- |
 | `sudo bash /opt/usher/src/deploy/setup.sh` | First-time setup (safe to re-run; also sets the recycle bin). Shown for the default install folder; see [deploy/README.md](deploy/README.md) for another |
-| `sudo usher-update` | Deploy the latest `stable` now: rebuild, restart, and roll back if the new version doesn't answer within 2 minutes. A timer (`usher-autodeploy.timer`) runs it every 15 minutes, so this is only needed for a change it holds back (Dockerfile or `deploy/compose.yaml` differing from what is running, including a hand edit of the installed `compose.yaml`; their pull requests are labelled `needs-server`) |
+| `sudo usher-update` | Update to the newest release now: set `USHER_VERSION`, pull its image, restart, and go back if the new version doesn't answer within 2 minutes. Nothing updates by itself unless you turn on the daily timer (`sudo systemctl enable --now usher-autodeploy.timer`), which runs it once a day and installs releases only |
 | `sudo usher-user add <name> [Display Name]` | Add an account |
 | `sudo usher-user ids` | List the Jellyfin account and quality profile IDs `usher.toml` can hold |
 | `sudo usher-user config check` | Check `usher.toml` the way start-up does |

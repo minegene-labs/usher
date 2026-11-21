@@ -1,4 +1,4 @@
-"""The update script reports how an update ended and, on every run, the newest version it saw on `stable`.
+"""The update script reports how an update ended and, on every run, the newest release it saw.
 
 Usher keeps the last result for Settings → Advanced and the latest check for Settings → About → Updates."""
 
@@ -15,10 +15,10 @@ from .files import write_private
 log = logging.getLogger("usher.updates")
 
 RESULTS = ("built", "rolled_back")
-COMMIT = re.compile(r"[0-9a-f]{7,40}")
 VERSION = re.compile(r"[0-9]{1,6}\.[0-9]{1,6}\.[0-9]{1,6}")
-# The timer runs every 15 minutes; a check older than this means the server has stopped looking (or can't reach GitHub).
-STALE_AFTER = 3600
+# The timer runs once a day (up to an hour late); a check older than two days means the server has stopped looking
+# (or can't reach GitHub).
+STALE_AFTER = 2 * 24 * 3600
 
 
 def local_only(client_ip: str, forwarded: str) -> bool:
@@ -63,7 +63,10 @@ class UpdateResult:
         if "result" in saved:  # written before the checks were kept: the file was the last result itself
             saved = {"last": saved}
         last, check = saved.get("last"), saved.get("check")
-        last = last if isinstance(last, dict) and last.get("result") in RESULTS else None
+        if isinstance(last, dict) and last.get("result") in RESULTS:  # an older file also holds a commit id, which is dropped
+            last = {key: last.get(key) for key in ("result", "version", "at")}
+        else:
+            last = None
         return last, check if valid_check(check) else None
 
     def _save(self):
@@ -73,14 +76,12 @@ class UpdateResult:
         """Record what the update script says. Raises ValueError with a reason when it can't be used."""
         if data.get("result") == "checked":
             return self._report_check(data)
-        result, version, commit = data.get("result"), data.get("version"), str(data.get("commit", ""))
+        result, version = data.get("result"), data.get("version")
         if result not in RESULTS:
             raise ValueError("result must be built, rolled_back or checked")
         if version != __version__:  # the script reports after the running version answered, so they agree
             raise ValueError("version isn't the one running")
-        if not COMMIT.fullmatch(commit):
-            raise ValueError("commit must be a hexadecimal id")
-        self.last = {"result": result, "version": version, "commit": commit[:12], "at": int(time.time())}
+        self.last = {"result": result, "version": version, "at": int(time.time())}
         self._save()
         return self.last
 
@@ -106,7 +107,7 @@ class UpdateResult:
         return "held" if check["held"] else "waiting"
 
     def view(self) -> dict:
-        """What the signed-in app reads: no commit ids and nothing that names the server."""
+        """What the signed-in app reads: nothing that names the server."""
         check = self.check and {"newest": self.check["newest"], "at": self.check["at"]}
         return {"last": self.last, "check": check, "state": self.state()}
 

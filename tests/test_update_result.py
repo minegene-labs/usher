@@ -13,6 +13,7 @@ from usher.release_check import ReleaseCheck
 from usher.store import Store
 from usher.update_result import UpdateResult, UpdateRoutes
 
+# what an older update script also sent; it is accepted and never kept
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
@@ -41,12 +42,13 @@ class UpdateResultTests(unittest.TestCase):
         self.updates = UpdateResult(self.dir)
 
     def report(self, result="built", **extra):
-        return self.updates.report({"result": result, "version": __version__, "commit": COMMIT, **extra})
+        return self.updates.report({"result": result, "version": __version__, **extra})
 
     def test_a_report_is_kept_and_survives_a_restart(self):
         self.report()
         last = self.updates.last
-        self.assertEqual((last["result"], last["version"], last["commit"]), ("built", __version__, COMMIT[:12]))
+        self.assertEqual((last["result"], last["version"]), ("built", __version__))
+        self.assertNotIn("commit", last)
         self.assertEqual(UpdateResult(self.dir).last, last)
         self.assertEqual(oct((self.dir / "update.json").stat().st_mode & 0o777), "0o600")
 
@@ -61,14 +63,14 @@ class UpdateResultTests(unittest.TestCase):
             self.assertIsNone(UpdateResult(self.dir).last)
 
     def test_bad_reports_are_refused_and_change_nothing(self):
-        for bad in ({"result": "done"}, {"version": "9.9.9"}, {"commit": "not-a-commit"}, {"commit": ""}, {"commit": "../etc"}):
+        for bad in ({"result": "done"}, {"version": "9.9.9"}, {"version": None}):
             with self.assertRaises(ValueError, msg=bad):
                 self.report(**bad)
         self.assertIsNone(self.updates.last)
 
     def post(self, **kw):
         req = Request(self.updates, **kw)
-        req.update_report({"result": "built", "version": __version__, "commit": COMMIT})
+        req.update_report({"result": "built", "version": __version__})
         return req.answer
 
     def test_the_report_is_taken_from_the_server_itself(self):
@@ -83,7 +85,7 @@ class UpdateResultTests(unittest.TestCase):
 
     def test_a_bad_report_is_answered_with_the_reason(self):
         req = Request(self.updates)
-        req.update_report({"result": "built", "version": "0.0.1", "commit": COMMIT})
+        req.update_report({"result": "built", "version": "0.0.1"})
         self.assertEqual(req.answer[0], 400)
 
     def test_the_last_result_is_what_advanced_shows_and_holds_no_secrets(self):
@@ -92,7 +94,7 @@ class UpdateResultTests(unittest.TestCase):
         req.update_get("/api/updates")
         self.assertEqual(req.answer[1]["last"]["result"], "rolled_back")
         self.assertEqual(set(req.answer[1]), {"last", "check", "state", "release"})
-        self.assertEqual(set(req.answer[1]["last"]), {"result", "version", "commit", "at"})
+        self.assertEqual(set(req.answer[1]["last"]), {"result", "version", "at"})
         self.assertNotIn("auth", json.dumps(req.answer[1]))
 
     # The check the script sends on every run ------------------------------------------------------------
@@ -114,10 +116,17 @@ class UpdateResultTests(unittest.TestCase):
         self.assertEqual((again.last["result"], again.check["newest"]), ("rolled_back", "9.9.9"))
 
     def test_a_result_file_from_before_the_checks_is_still_read(self):
-        old = {"result": "built", "version": __version__, "commit": COMMIT[:12], "at": 5}
+        old = {"result": "built", "version": __version__, "at": 5}
         (self.dir / "update.json").write_text(json.dumps(old))
         updates = UpdateResult(self.dir)
         self.assertEqual((updates.last, updates.check), (old, None))
+
+    def test_a_commit_id_in_an_old_report_or_file_is_dropped(self):
+        self.updates.report({"result": "built", "version": __version__, "commit": COMMIT})
+        self.assertEqual(set(self.updates.last), {"result", "version", "at"})
+        old = {"result": "built", "version": __version__, "commit": COMMIT[:12], "at": 5}
+        (self.dir / "update.json").write_text(json.dumps({"last": old, "check": None}))
+        self.assertEqual(UpdateResult(self.dir).last, {"result": "built", "version": __version__, "at": 5})
 
     def test_bad_checks_are_refused_and_change_nothing(self):
         for bad in ({"newest": "latest"}, {"newest": ""}, {"newest": 3}, {"newest": "1.2"}, {"held": "yes"}, {"failed": 1}, {"held": None}):
@@ -177,7 +186,7 @@ class UpdateResultTests(unittest.TestCase):
     def test_the_newest_version_running_is_up_to_date(self):
         self.assertEqual(self.state(newest=__version__), "up_to_date")
 
-    def test_a_newer_version_on_stable_is_waiting(self):
+    def test_a_newer_release_is_waiting(self):
         self.assertEqual(self.state(newest="999.0.0"), "waiting")
 
     def test_a_newer_version_that_needs_a_step_on_the_server_is_held(self):
@@ -186,11 +195,14 @@ class UpdateResultTests(unittest.TestCase):
     def test_a_newer_version_that_failed_its_health_check_is_rolled_back(self):
         self.assertEqual(self.state(newest="999.0.0", failed=True), "rolled_back")
 
-    def test_a_check_older_than_an_hour_is_cant_tell_whatever_it_said(self):
+    def test_a_check_older_than_two_days_is_cant_tell_whatever_it_said(self):
+        """The timer runs once a day, so a day and a half old is still recent."""
+        two_days = 2 * 24 * 3600
         for flags in ({}, {"held": True}, {"failed": True}):
-            self.assertEqual(self.state(age=3601, newest="999.0.0", **flags), "unknown", flags)
-        self.assertEqual(self.state(age=3601, newest=__version__), "unknown")
-        self.assertEqual(self.state(age=3600, newest=__version__), "up_to_date")  # the hour itself is still recent
+            self.assertEqual(self.state(age=two_days + 1, newest="999.0.0", **flags), "unknown", flags)
+        self.assertEqual(self.state(age=two_days + 1, newest=__version__), "unknown")
+        self.assertEqual(self.state(age=two_days, newest=__version__), "up_to_date")
+        self.assertEqual(self.state(age=36 * 3600, newest="999.0.0"), "waiting")
 
     def test_flags_about_a_version_already_running_are_ignored(self):
         """A held or failed flag from before the running version caught up must not show."""
@@ -211,7 +223,6 @@ class UpdateResultTests(unittest.TestCase):
         self.assertEqual(body["state"], "held")
         self.assertEqual(set(body["check"]), {"newest", "at"})
         self.assertEqual(body["check"]["newest"], "999.0.0")
-        self.assertNotIn(COMMIT[:12], json.dumps(body["check"]))
 
     def test_no_notice_is_sent_and_the_old_opt_in_table_is_gone(self):
         self.assertFalse(hasattr(UpdateResult, "pool"))

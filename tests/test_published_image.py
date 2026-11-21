@@ -1,6 +1,6 @@
 """The published image and the one generic compose file. Release, run by hand, builds the image for amd64 and arm64, pushes it with
 the version and latest as tags and attests its build provenance; compose.yaml at the repository root runs that image
-with nothing from the machine it runs on. The maintainer's own deploy (deploy/compose.yaml) keeps building from source.
+with nothing from the machine it runs on. The install folder's deploy/compose.yaml runs the same image at the version in USHER_VERSION.
 The workflow and the files are read, not run: no registry is called."""
 
 import json
@@ -224,11 +224,12 @@ class GenericComposeTests(unittest.TestCase):
     def test_reaches_apps_on_this_machine_by_a_name_not_by_host_networking(self):
         self.assertIn('      - "host.docker.internal:host-gateway"', self.service)
 
-    def test_the_maintainers_file_still_builds_from_source(self):
+    def test_the_install_folders_file_runs_the_same_image_at_the_version_in_env(self):
         mine = (ROOT / "deploy" / "compose.yaml").read_text(encoding="utf-8")
-        self.assertIn("    build: ./src", mine)
-        self.assertIn("    image: usher:local", mine)
-        self.assertNotIn("ghcr.io", mine)
+        image = re.search(r"(?m)^    image: (\S+)$", self.service).group(1)
+        self.assertIn(f"    image: {image}\n", mine)  # the same name, and USHER_VERSION picks the version
+        self.assertNotRegex(mine, r"(?m)^\s+build:")
+        self.assertNotIn("usher:local", mine)
 
     @unittest.skipUnless(shutil.which("docker"), "needs docker compose")
     def test_compose_accepts_the_file_as_it_is_with_no_other_file_beside_it(self):

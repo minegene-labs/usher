@@ -17,5 +17,5 @@ Passwords, API keys, tokens, session cookies, push keys, and your server's addre
 ## Look here first
 
 - Setting up or changing `usher.toml`: [docs/configuration.md](docs/configuration.md).
-- Installing, auto-deploy and upgrading: [deploy/README.md](deploy/README.md).
+- Installing, updating and upgrading: [deploy/README.md](deploy/README.md).
 - A security problem, such as a way to get into someone else's account: [SECURITY.md](SECURITY.md).

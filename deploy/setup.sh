@@ -17,7 +17,7 @@ atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the firs
   done
 }
 MISSING=()
-for tool in git curl flock cmp logger systemctl docker; do command -v "$tool" >/dev/null || MISSING+=("$tool"); done
+for tool in git curl flock logger systemctl docker; do command -v "$tool" >/dev/null || MISSING+=("$tool"); done
 command -v python3 >/dev/null && python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null \
   || MISSING+=("python3 3.11 or later")
 if command -v docker >/dev/null && ! atleast 2.20.2 "$(docker compose version --short 2>/dev/null || true)"; then
@@ -54,15 +54,19 @@ git ls-remote "$USHER_REPO" HEAD >/dev/null 2>&1 \
   || { echo "FAIL: can't read $USHER_REPO. Check USHER_REPO in $SITE (an https:// address) and the network."; exit 1; }
 echo "PASS the server can read the repo"
 
-# 2. Code: always exactly what's on stable (main once its tests have passed) -------
-say "Code"
+# 2. Deploy files: the newest release's, in src (Usher itself runs from the published image) -------
+say "Newest release"
+VER=$(git ls-remote --tags --refs "$USHER_REPO" 'v*' \
+      | sed -n 's#.*refs/tags/v\([0-9]\{1,6\}\.[0-9]\{1,6\}\.[0-9]\{1,6\}\)$#\1#p' \
+      | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+[ -n "$VER" ] || { echo "FAIL: $USHER_REPO has no release yet."; exit 1; }
 if [ -d "$DIR/src/.git" ]; then
   git -C "$DIR/src" remote set-url origin "$USHER_REPO"
-  git -C "$DIR/src" fetch --depth 1 origin stable && git -C "$DIR/src" reset --hard FETCH_HEAD
+  git -C "$DIR/src" fetch --depth 1 origin "refs/tags/v$VER:refs/tags/v$VER" && git -C "$DIR/src" reset --hard "v$VER"
 else
-  git clone --depth 1 --branch stable "$USHER_REPO" "$DIR/src"
+  git clone --depth 1 --branch "v$VER" "$USHER_REPO" "$DIR/src"
 fi
-git -C "$DIR/src" log -1 --format='Using %h: %s (%cr)'
+echo "PASS the deploy files are from release $VER"
 
 # 2b. Settings: usher.toml, the only place for them ------------------------------------------------
 say "Settings"
@@ -149,14 +153,16 @@ askpath USHER_RECYCLE_BIN "Recycle bin folder for Sonarr and Radarr, at the same
 RECYCLE=$(envget USHER_RECYCLE_BIN)
 
 # 4. Container -------------------------------------------------------------------
-say "Build and start Usher"
+say "Start Usher"
 install -d -m 755 "$(dirname "$CONF")"
 printf '# Usher install folder, read by usher-update (written by setup.sh)\nUSHER_HOME=%s\n' "$DIR" > "$CONF.new"
 chmod 644 "$CONF.new"; mv "$CONF.new" "$CONF"
 install -m 644 "$DIR/src/deploy/compose.yaml" "$DIR/compose.yaml"
 chmod 644 "$SITE"
 mkdir -p "$DIR/data" && chown 1000:1001 "$DIR/data" && chmod 700 "$DIR/data"
-(cd "$DIR" && docker compose build --pull && docker compose up -d --wait --wait-timeout 120) \
+# The version to run, written once: an update after this is usher-update, or a new version here and the same command.
+grep -q '^USHER_VERSION=.' "$DIR/.env" || setkey USHER_VERSION "$VER"
+(cd "$DIR" && docker compose pull && docker compose up -d --wait --wait-timeout 120) \
   || { echo "FAIL: Usher didn't start or isn't healthy. Look at: sudo docker logs --tail 50 usher"; exit 1; }
 curl -fsS http://127.0.0.1:8484/healthz && echo
 docker exec usher python -m usher.cli config check || { echo "FAIL: fix the settings above, then run this again"; exit 1; }
@@ -193,8 +199,13 @@ EOF
 install -m 755 "$DIR/src/deploy/usher-update" /usr/local/bin/usher-update
 install -m 644 "$DIR/src/deploy/usher-autodeploy.service" "$DIR/src/deploy/usher-autodeploy.timer" /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable --now usher-autodeploy.timer
 chmod 755 /usr/local/bin/usher-user /usr/local/bin/usher-update
+# Automatic updates are optional and stay as they are: off on a new install, and still on where they were turned on.
+if systemctl is-enabled --quiet usher-autodeploy.timer 2>/dev/null; then
+  echo "Automatic updates are on: once a day, to a new release only. To turn them off: sudo systemctl disable --now usher-autodeploy.timer"
+else
+  echo "Automatic updates are off. To update by hand: sudo usher-update. To turn them on: sudo systemctl enable --now usher-autodeploy.timer"
+fi
 
 # 7. Accounts (only asked for when there are none) -------------------------------------
 say "Accounts"

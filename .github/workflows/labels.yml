@@ -19,7 +19,7 @@ jobs:
           gh label create bug         --color d73a4a --description "Something doesn't work as it should" --force
           gh label create enhancement --color a2eeef --description "Make something existing work better"  --force
           gh label create feature     --color 0e8a16 --description "Something new the app should do"      --force
-          gh label create needs-server --color fbca04 --description "Needs a step on the server after the merge (sudo usher-update)" --force
+          gh label create needs-server --color fbca04 --description "Needs a step on the server when the release with it is installed (sudo usher-update)" --force
           gh label create hold        --color b60205 --description "Auto-merge leaves this pull request open for a person to merge" --force
           gh label create upstream    --color 5319e7 --description "An integration's latest release fails a call Usher makes" --force
           gh label create upstream-release --color 7057ff --description "A new release of an integration to support" --force

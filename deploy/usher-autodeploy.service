@@ -1,9 +1,9 @@
 [Unit]
-Description=Deploy Usher when its stable branch moves
+Description=Update Usher to its newest release
 After=docker.service network-online.target
 Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/local/bin/usher-update --if-changed
+ExecStart=/usr/local/bin/usher-update --auto
 TimeoutStartSec=15min

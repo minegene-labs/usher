@@ -1,7 +1,7 @@
 name: Promote
 # Called by Tests once the tests and the privacy check pass on main (a push, or a run Auto-merge starts
 # after a merge), or by Auto-merge with the squash commit when the pull request's own run already tested
-# exactly that commit's content: move the stable branch (which the server deploys from) to that commit, then
+# exactly that commit's content: move the stable branch (which Release starts from) to that commit, then
 # report on the merge. Nothing is released here: a release, with its tag, notes and container image, is made
 # by hand with the Release workflow (release.yml). It isn't a workflow_run of Tests: GitHub doesn't send that
 # event for a run started with a workflow's own token, so merges made by Auto-merge would never be promoted.

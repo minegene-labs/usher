@@ -1,7 +1,7 @@
 name: Needs server
-# A change to these files isn't deployed by the 15-minute timer: someone has to run a step on the server
-# (sudo usher-update, or reinstalling the autodeploy units by hand). Label such pull requests needs-server,
-# so one label search finds them all.
+# A change to these files isn't installed by an update: someone has to run a step on the server when the
+# release that has it is installed (sudo usher-update, or setup.sh again for the update script and units).
+# Label such pull requests needs-server, so one label search finds them all.
 on:
   pull_request:
     types: [opened, reopened, synchronize]

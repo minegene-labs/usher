@@ -28,7 +28,7 @@ Usher is meant for a household or small group: a handful of trusted people, one 
 - API keys are read from Sonarr's, Radarr's and Prowlarr's own `config.xml`, mounted read-only. The Transmission password, Jellyfin key and TMDb token live in `.env` in the install folder (root, 600).
 - The data folder (`data` in the install folder) is 700, and every file Usher keeps there (accounts database, push key, Discover rows, replacements) is written 600, whatever the umask.
 - Container: runs as 1000:1001, read-only filesystem, all capabilities dropped, `no-new-privileges`, 256 MB memory cap.
-- The server pulls this public repo over HTTPS, with no key or credential; nothing reaches into it (no runner, no inbound access). See [deploy/README.md](../deploy/README.md).
+- The install folder runs the image of a published release, which it pulls over HTTPS with no key or credential, and updates only when told to: by hand, or once a day to a newer release if the optional timer is turned on. Nothing reaches into the server (no runner, no inbound access), and an update never changes what runs as root. See [deploy/README.md](../deploy/README.md).
 
 ## Secrets
 
@@ -40,7 +40,7 @@ The weekly checks run pip-audit on `requirements.txt` and Grype on the image the
 
 ## Update reports
 
-`usher-update` tells Usher how an update ended with `POST /internal/update-result` on `127.0.0.1`, the way `/healthz` gives its details only to requests made on the server itself: a request from another address, or one that came through the reverse proxy (it carries `X-Forwarded-For`), is refused. It takes a result (`built` or `rolled_back`) with the running version (which must match) and a commit id, or a check (`checked`) with the newest version seen on `stable` and whether it is held or failed, and changes nothing else. Usher keeps the last result and the latest check, with its time, in `update.json` in the data folder. Settings reads the state computed from them (no commit ids, nothing that names the server), and the app never contacts GitHub.
+`usher-update` tells Usher how an update ended with `POST /internal/update-result` on `127.0.0.1`, the way `/healthz` gives its details only to requests made on the server itself: a request from another address, or one that came through the reverse proxy (it carries `X-Forwarded-For`), is refused. It takes a result (`built` or `rolled_back`) with the running version (which must match), or a check (`checked`) with the newest release seen and whether it is held or failed, and changes nothing else. It runs only when someone updates by hand or has turned on the daily timer; without it nothing reports in, and Usher's own once-a-day look at the newest release (`updates.check_releases`) is all Settings has. Usher keeps the last result and the latest check, with its time, in `update.json` in the data folder. Settings reads the state computed from them (nothing that names the server), and the app never contacts GitHub.
 
 ## Health checks
 

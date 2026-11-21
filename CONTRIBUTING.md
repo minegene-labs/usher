@@ -98,7 +98,7 @@ The Tests workflow already checks what a rule can decide (file length, identifyi
 
 ## Releases
 
-A merge makes no release: it moves `stable`, which the server deploys from, and its changelog lines wait under `## [Unreleased]`. A maintainer runs the Release workflow from the Actions page, on `main`, when the collected changes are worth a release, giving the new version (three numbers, for example `1.5.0`; at least the app's current version and newer than the latest release). It then:
+A merge makes no release: it moves `stable`, which Release starts from, and its changelog lines wait under `## [Unreleased]`. A maintainer runs the Release workflow from the Actions page, on `main`, when the collected changes are worth a release, giving the new version (three numbers, for example `1.5.0`; at least the app's current version and newer than the latest release). It then:
 
 - gives the lines under `## [Unreleased]` that version and leaves a fresh, empty `## [Unreleased]`, and sets `__version__` to it (`.github/scripts/prepare_release.py`), as one commit pushed straight to `main` as the release GitHub App (see below), which is on the `protect-main` ruleset's bypass list. Release runs only when `main` is the commit `stable` already holds, so it starts from tested code; if a merge is still being tested, run it again once that passes;
 - waits until `stable` holds the release commit, which only happens once Tests pass on it: the app's push starts Tests on `main` by itself, as every push to `main` does;

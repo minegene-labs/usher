@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
-# Deploy the latest tested Usher (branch stable, fetched over HTTPS): rebuild, restart, let Docker
-# Compose wait until the new container is healthy, and roll back if it isn't within 2 minutes.
-#   usher-update               deploy now, by hand
-#   usher-update --if-changed  for the 15-minute timer: quiet unless stable moved; a change to
-#                              Dockerfile or deploy/compose.yaml is held for a manual run, and a
-#                              version that failed is not retried until stable moves again
-# Every run that reaches GitHub also tells Usher the newest version it saw (Settings → About → Updates).
-# Installed by hand (setup.sh), never by a deploy, so a pull request can't change what runs as root.
-# See deploy/README.md.
+# Update Usher to its newest release: set USHER_VERSION in .env, pull that image, restart, let Docker Compose wait
+# until the new container is healthy, and put the previous version back if it isn't within 2 minutes.
+#   usher-update         update now, by hand
+#   usher-update --auto  for the daily timer, which is off unless you turn it on: quiet unless it updates, and a
+#                        version that failed is not tried again until a newer release comes out
+# Every run that reaches GitHub also tells Usher the newest release it saw (Settings → About → Updates).
+# Installed by hand (setup.sh), so a release can't change what runs as root. See deploy/README.md.
 set -euo pipefail
 # The install folder: USHER_HOME in /etc/default/usher (setup.sh writes it), or /opt/usher by default.
 # The file is read, not sourced, since this runs as root. USHER_HOME in the environment wins (tests).
@@ -22,11 +20,9 @@ case $DIR in
   *) echo "USHER_HOME must be a full path, not '$DIR' (in $CONF)" >&2; exit 1 ;;
 esac
 [ -f "$DIR/compose.yaml" ] || { echo "No Usher install in $DIR (USHER_HOME in $CONF)." >&2; exit 1; }
-SRC=$DIR/src
-BRANCH=stable
 STATE=${USHER_STATE:-/var/lib/usher-deploy}
-export GIT_TERMINAL_PROMPT=0   # a fetch that asks for a login fails instead of waiting
-AUTO=0; [ "${1:-}" = "--if-changed" ] && AUTO=1
+export GIT_TERMINAL_PROMPT=0   # a request that asks for a login fails instead of waiting
+AUTO=0; [ "${1:-}" = "--auto" ] && AUTO=1
 install -d -m 700 "$STATE"
 exec 9>"$STATE/lock"; flock -n 9 || { echo "Another usher-update is running."; exit 0; }
 # Under systemd, stdout and stderr already go to the journal as usher-update, so log each line once
@@ -38,21 +34,25 @@ else
   say() { echo "$1"; logger -t usher-update -p user.info -- "$1"; }
   bad() { echo "$1" >&2; logger -t usher-update -p user.err -- "$1"; }
 fi
-same() { git -C "$SRC" show "$NEW:$1" 2>/dev/null | cmp -s - "$2"; }   # file $1 in NEW == file $2
-ver() { sed -n 's/^__version__ = "\(.*\)"$/\1/p' "$SRC/usher/__init__.py"; }
 post() {   # one JSON report to Usher on this server; never fails the update
   curl -fsS --max-time 5 -X POST -H 'Content-Type: application/json' -d "$1" \
     http://127.0.0.1:8484/internal/update-result >/dev/null 2>&1 || true
 }
-report() {   # tell Usher how this update ended (built or rolled_back), so it can notify
-  post "{\"result\": \"$1\", \"version\": \"$2\", \"commit\": \"$3\"}"
+report() {   # tell Usher how this update ended (built or rolled_back), so Settings can show it
+  post "{\"result\": \"$1\", \"version\": \"$2\"}"
 }
-checked() {   # checked HELD FAILED (true or false): the newest version on stable, so Settings can show whether updates keep arriving
-  [ -n "$NEWVER" ] || return 0
-  post "{\"result\": \"checked\", \"newest\": \"$NEWVER\", \"held\": $1, \"failed\": $2}"
+checked() {   # checked HELD FAILED (true or false): the newest release, so Settings can show whether updates keep arriving
+  post "{\"result\": \"checked\", \"newest\": \"$NEWEST\", \"held\": $1, \"failed\": $2}"
+}
+setver() {   # USHER_VERSION in .env: the one place the version is written, and the one the image tag reads
+  [ -f "$DIR/.env" ] || { bad "No $DIR/.env: run setup.sh again."; exit 1; }
+  ( umask 077
+    grep -v '^USHER_VERSION=' "$DIR/.env" > "$DIR/.env.new" || true
+    printf 'USHER_VERSION=%s\n' "$1" >> "$DIR/.env.new"
+    mv "$DIR/.env.new" "$DIR/.env" )
 }
 # The image's health check asks /healthz. Compose recreates the container when the image changes, so a
-# healthy container runs the version in src.
+# healthy container runs the version in .env.
 up() { docker compose up -d "$@" --wait --wait-timeout 120; }
 atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the first or later (as in setup.sh)
   local IFS=. want have i v=${2#v}
@@ -61,85 +61,92 @@ atleast() {   # atleast 2.20.2 v2.29.1-desktop.1: the second version is the firs
     [ "$((10#${have[i]:-0}))" -eq "$((10#${want[i]:-0}))" ] || { [ "$((10#${have[i]:-0}))" -gt "$((10#${want[i]:-0}))" ]; return; }
   done
 }
+newer() {   # newer 1.5.0 1.4.6: the first version is later than the second
+  [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)" = "$1" ]
+}
 
-PREV=$(git -C "$SRC" rev-parse HEAD)
-if ! git -C "$SRC" fetch -q --depth 1 origin "$BRANCH"; then
+REPO=$(sed -n 's/^USHER_REPO=//p' "$DIR/site.env" 2>/dev/null | tail -n 1 || true)
+case $REPO in
+  https://*) ;;
+  *) bad "USHER_REPO in $DIR/site.env must be an https:// address."; exit 1 ;;
+esac
+# The newest release is the highest vX.Y.Z tag: the Release workflow tags a version only when it publishes it.
+if ! TAGS=$(git ls-remote --tags --refs "$REPO" 'v*'); then
   if [ -n "$(find "$STATE/fetched" -mmin +1440 2>/dev/null)" ]; then
-    bad "Usher updates: can't fetch $BRANCH from GitHub for over a day (network or branch)."
+    bad "Usher updates: can't read the releases from GitHub for over a day (network or address)."
   fi
   [ $AUTO = 1 ] && exit 0   # a short outage isn't worth a failed unit in the digest
   exit 1
 fi
+NEWEST=$(printf '%s\n' "$TAGS" | sed -n 's#.*refs/tags/v\([0-9]\{1,6\}\.[0-9]\{1,6\}\.[0-9]\{1,6\}\)$#\1#p' \
+         | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1)
+if [ -z "$NEWEST" ]; then
+  bad "Usher updates: $REPO has no release yet."
+  [ $AUTO = 1 ] && exit 0
+  exit 1
+fi
 touch "$STATE/fetched"
-NEW=$(git -C "$SRC" rev-parse FETCH_HEAD)
-TITLE=$(git -C "$SRC" log -1 --format=%s "$NEW")
-# A version that can't be read only means no check is sent (pipefail would otherwise stop the update here).
-NEWVER=$({ git -C "$SRC" show "$NEW:usher/__init__.py" 2>/dev/null || true; } | sed -n 's/^__version__ = "\(.*\)"$/\1/p')
-if [ "$PREV" = "$NEW" ]; then
+
+# What is running: the version Usher itself reports, as Settings shows it.
+RUNNING=$({ curl -fsS --max-time 5 http://127.0.0.1:8484/healthz 2>/dev/null || true; } | sed -n 's/.*"version": *"\([0-9.]*\)".*/\1/p')
+if [ -z "$RUNNING" ] && [ $AUTO = 1 ]; then
+  bad "Usher updates: Usher doesn't answer on 127.0.0.1:8484, so nothing was updated. Look at: sudo docker logs --tail 50 usher"
+  exit 1
+fi
+if [ -n "$RUNNING" ] && ! newer "$NEWEST" "$RUNNING"; then
   checked false false
-  [ $AUTO = 1 ] || echo "Already up to date: $TITLE"
+  [ $AUTO = 1 ] || echo "Already up to date: $RUNNING"
   exit 0
 fi
-if [ $AUTO = 1 ]; then
-  if [ "$(cat "$STATE/failed" 2>/dev/null)" = "$NEW" ]; then
-    checked false true
-    exit 0
-  fi
-  # Compare with what is running, not only with the checked-out commit (which setup.sh or a shallow
-  # fetch can move): the installed compose.yaml, and the Dockerfile the running image was built from.
-  BUILT=$STATE/Dockerfile.deployed; [ -f "$BUILT" ] || BUILT=$SRC/Dockerfile
-  if ! git -C "$SRC" diff --quiet "$PREV" "$NEW" -- Dockerfile deploy/compose.yaml \
-     || ! same deploy/compose.yaml "$DIR/compose.yaml" || ! same Dockerfile "$BUILT"; then
-    if [ "$(cat "$STATE/held" 2>/dev/null)" != "$NEW" ]; then
-      echo "$NEW" > "$STATE/held"
-      bad "Usher update held: ${NEW:0:7} ($TITLE) changes Dockerfile or deploy/compose.yaml. Check it, then run: sudo usher-update"
-    fi
-    checked true false
-    exit 0
-  fi
+if [ $AUTO = 1 ] && [ "$(cat "$STATE/failed" 2>/dev/null)" = "$NEWEST" ]; then
+  checked false true
+  exit 0
 fi
 
-# --wait-timeout and start_interval in compose.yaml need Compose 2.20.2; an older one would fail the deploy and
-# then the rollback too, while the running Usher is fine. Hold instead, like a change to the image files.
+# --wait-timeout and start_interval in compose.yaml need Compose 2.20.2; an older one would fail the update and
+# then the rollback too, while the running Usher is fine. Hold instead.
 COMPOSE=$(docker compose version --short 2>/dev/null || true)
 if ! atleast 2.20.2 "$COMPOSE"; then
-  if [ $AUTO = 0 ] || [ "$(cat "$STATE/held" 2>/dev/null)" != "$NEW" ]; then
-    echo "$NEW" > "$STATE/held"
-    bad "Usher update held: ${NEW:0:7} needs Docker Compose 2.20.2 or later (found ${COMPOSE:-none}). Update it, then run: sudo usher-update"
+  if [ $AUTO = 0 ] || [ "$(cat "$STATE/held" 2>/dev/null)" != "$NEWEST" ]; then
+    echo "$NEWEST" > "$STATE/held"
+    bad "Usher update held: $NEWEST needs Docker Compose 2.20.2 or later (found ${COMPOSE:-none}). Update it, then run: sudo usher-update"
   fi
   checked true false
   [ $AUTO = 1 ] && exit 0
   exit 1
 fi
 
-say "Usher: deploying ${NEW:0:7} ($TITLE)"
-docker image tag usher:local usher:prev 2>/dev/null || true
-cp "$DIR/compose.yaml" "$STATE/compose.prev.yaml"
-git -C "$SRC" reset -q --hard "$NEW"
-install -m 644 "$SRC/deploy/compose.yaml" "$DIR/compose.yaml"
+say "Usher: updating ${RUNNING:-the version in .env} to $NEWEST"
 cd "$DIR"
-WANT=$(ver)
-if docker compose build --pull -q && up; then
-  rm -f "$STATE/held" "$STATE/failed"
-  cp "$SRC/Dockerfile" "$STATE/Dockerfile.deployed"
-  say "Usher updated to $WANT (${NEW:0:7}): $TITLE"
-  report built "$WANT" "$NEW"
+setver "$NEWEST"
+# The image exists a little after its tag: until it does, nothing has changed on this machine.
+if ! docker compose pull -q; then
+  [ -z "$RUNNING" ] || setver "$RUNNING"
+  bad "Usher $NEWEST can't be downloaded yet (its image may still be being published); nothing was changed."
   checked false false
-  [ -n "${JOURNAL_STREAM:-}" ] || { curl -fsS http://127.0.0.1:8484/healthz && echo; }
+  [ $AUTO = 1 ] && exit 0
+  exit 1
+fi
+if up; then
+  rm -f "$STATE/held" "$STATE/failed"
+  say "Usher updated to $NEWEST"
+  report built "$NEWEST"
+  checked false false
   exit 0
 fi
 
-echo "$NEW" > "$STATE/failed"
-bad "Usher $WANT (${NEW:0:7}) failed to build or start; rolling back to ${PREV:0:7}."
-git -C "$SRC" reset -q --hard "$PREV"
-cp "$STATE/compose.prev.yaml" "$DIR/compose.yaml"
-docker image tag usher:prev usher:local 2>/dev/null || true
-OLD=$(ver)
+echo "$NEWEST" > "$STATE/failed"
+if [ -z "$RUNNING" ]; then
+  bad "Usher $NEWEST failed to start, and there is no earlier version to go back to. Look now: sudo docker logs --tail 50 usher"
+  exit 1
+fi
+bad "Usher $NEWEST failed to start; going back to $RUNNING."
+setver "$RUNNING"
 if up --force-recreate; then
-  bad "Usher rolled back to $OLD (${PREV:0:7}); it won't retry ${NEW:0:7} by itself."
-  report rolled_back "$OLD" "$PREV"
+  bad "Usher is back on $RUNNING; it won't try $NEWEST again by itself."
+  report rolled_back "$RUNNING"
   checked false true
 else
-  bad "Usher rollback to ${PREV:0:7} did not come up either. Look now: sudo docker logs --tail 50 usher"
+  bad "Usher $RUNNING did not come up either. Look now: sudo docker logs --tail 50 usher"
 fi
 exit 1

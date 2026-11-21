@@ -1,13 +1,13 @@
-# compose.yaml in the install folder (USHER_HOME, /opt/usher by default), copied there by deploy/setup.sh; the
-# code lives in its src folder. See deploy/README.md. Everything specific to one home lives in that folder only:
+# compose.yaml in the install folder (USHER_HOME, /opt/usher by default), copied there by deploy/setup.sh. It runs
+# the published image at the version in USHER_VERSION; the newest release when that is unset. See deploy/README.md.
+# Everything specific to one home lives in that folder only:
 #   config/usher.toml  every setting (see deploy/usher.example.toml)
-#   .env               secrets (root only), and the host folders and files mounted below
+#   .env               secrets (root only), USHER_VERSION, and the host folders and files mounted below
 #   site.env           the repo address setup.sh clones, and TZ, the container's time zone (read here for TZ)
 # Docker Compose reads the mount variables from .env and stops, naming the variable, if one is missing.
 services:
   usher:
-    build: ./src
-    image: usher:local
+    image: ghcr.io/minegene-labs/usher:${USHER_VERSION:-latest}
     container_name: usher
     network_mode: host
     user: "1000:1001"

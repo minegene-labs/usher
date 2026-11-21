@@ -72,9 +72,9 @@ class DeployPathTests(unittest.TestCase):
         self.assertIn("DIR=${USHER_HOME:-/opt/usher}", text)
         self.assertNotIn('. "$CONF"', text, "read, not sourced: it runs as root")
 
-    def test_readme_explains_install_auto_deploy_security_and_upgrading(self):
+    def test_readme_explains_install_updating_security_and_upgrading(self):
         text = (DEPLOY / "README.md").read_text(encoding="utf-8")
-        for heading in ("## Requirements", "## Install", "## First run", "## Auto-deploy", "## Security model", "## Upgrading"):
+        for heading in ("## Requirements", "## Install", "## First run", "## Updating", "## Security model", "## Upgrading"):
             self.assertIn(heading, text)
         for var in (*MOUNTS, "USHER_HOME"):
             self.assertIn(f"`{var}`", text)
@@ -96,12 +96,13 @@ class DeployPathTests(unittest.TestCase):
                 self.skipTest("needs the Compose plugin")
             self.assertNotEqual(missing.returncode, 0)
             self.assertIn("USHER_RECYCLE_BIN", missing.stderr)
-            (home / ".env").write_text("".join(f"{v}=/made/up/{v.lower()}\n" for v in MOUNTS))
+            (home / ".env").write_text("".join(f"{v}=/made/up/{v.lower()}\n" for v in MOUNTS) + "USHER_VERSION=1.2.3\n")
             ok = subprocess.run(["docker", "compose", "config"], cwd=home, capture_output=True, text=True)
             self.assertEqual(ok.returncode, 0, ok.stderr)
             for var in MOUNTS:
                 self.assertIn(f"source: /made/up/{var.lower()}", ok.stdout)
             self.assertIn("start_interval: 2s", ok.stdout)
+            self.assertIn("image: ghcr.io/minegene-labs/usher:1.2.3", ok.stdout)
 
 
 if __name__ == "__main__":

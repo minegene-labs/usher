@@ -89,7 +89,7 @@ class UpdatesRow(unittest.TestCase):
         self.assertEqual(text["just_now"]["detail"], "Checked just now")
         self.assertEqual(text["one_minute"]["detail"], "Checked 1 minute ago")
         self.assertEqual(text["waiting"]["label"], "Update waiting")
-        self.assertIn("installs by itself within 15 minutes", text["waiting"]["detail"])
+        self.assertIn("installs by itself within a day", text["waiting"]["detail"])
         self.assertIn("1.1.0", text["waiting"]["detail"])
         self.assertEqual(text["held"]["label"], "Held")
         self.assertIn("needs a step on the server first", text["held"]["detail"])
@@ -97,7 +97,7 @@ class UpdatesRow(unittest.TestCase):
         self.assertIn("didn't work, so the previous version is still running", text["rolled_back"]["detail"])
         self.assertEqual(text["unknown"]["label"], "Can't tell")
         self.assertEqual(text["none"]["label"], "Can't tell")
-        self.assertIn("over an hour", text["none"]["detail"])
+        self.assertIn("over two days", text["none"]["detail"])
 
     def test_a_newer_release_is_offered_with_its_notes_and_the_command(self):
         self.need_node()
@@ -131,7 +131,7 @@ class UpdatesRow(unittest.TestCase):
     def test_the_row_reads_the_state_with_a_hidden_dot(self):
         self.need_node()
         row = self.out["rows"]["waiting"]
-        self.assertEqual(row["words"], "UpdatesUpdate waiting · Version 1.1.0 installs by itself within 15 minutes")
+        self.assertEqual(row["words"], "UpdatesUpdate waiting · Version 1.1.0 installs by itself within a day")
         self.assertEqual((row["dot"], row["hidden"]), ("dot off", "true"))
 
     def test_while_loading_and_when_the_server_cant_be_reached(self):

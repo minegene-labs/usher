@@ -10,7 +10,7 @@ from pathlib import Path
 SETUP = Path(__file__).resolve().parent.parent / "deploy" / "setup.sh"
 BASH = shutil.which("bash")
 # The tools deploy/README.md lists under Requirements, as setup.sh looks for them
-TOOLS = ("git", "curl", "flock", "cmp", "logger", "systemctl", "python3", "docker")
+TOOLS = ("git", "curl", "flock", "logger", "systemctl", "python3", "docker")
 
 
 class SetupScriptTests(unittest.TestCase):
@@ -41,6 +41,13 @@ class SetupScriptTests(unittest.TestCase):
 
     def test_it_installs_nothing(self):
         self.assertNotIn("apt-get", self.text)
+
+    def test_it_pulls_the_image_of_a_release_and_builds_nothing(self):
+        self.assertIn("docker compose pull && docker compose up -d --wait --wait-timeout 120", self.text)
+        self.assertNotIn("docker compose build", self.text)
+        self.assertNotIn("--branch stable", self.text)
+        self.assertIn('--branch "v$VER"', self.text)
+        self.assertIn('setkey USHER_VERSION "$VER"', self.text)  # the version to run is written, once
 
     def test_compose_waits_for_a_healthy_usher(self):
         self.assertIn("docker compose up -d --wait --wait-timeout 120", self.text)
@@ -119,8 +126,8 @@ class ToolCheckTests(unittest.TestCase):
 
     def test_every_missing_tool_is_named_in_one_line(self):
         (self.bin / "flock").unlink()
-        (self.bin / "cmp").unlink()
-        self.assertStopsNaming(self.run_setup(), "flock", "cmp")
+        (self.bin / "systemctl").unlink()
+        self.assertStopsNaming(self.run_setup(), "flock", "systemctl")
 
     def test_missing_docker_is_named_once(self):
         (self.bin / "docker").unlink()
@@ -128,10 +135,10 @@ class ToolCheckTests(unittest.TestCase):
         self.assertStopsNaming(run, "docker")
         self.assertNotIn("Compose", run.stdout)
 
-    def test_cmp_and_logger_for_usher_update_are_checked(self):
-        (self.bin / "cmp").unlink()
+    def test_flock_and_logger_for_usher_update_are_checked(self):
+        (self.bin / "flock").unlink()
         (self.bin / "logger").unlink()
-        self.assertStopsNaming(self.run_setup(), "cmp", "logger")
+        self.assertStopsNaming(self.run_setup(), "flock", "logger")
 
     def test_a_container_that_does_not_become_healthy_stops_setup_with_a_hint(self):
         text = SETUP.read_text()
