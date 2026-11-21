@@ -5,7 +5,7 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ## [Unreleased]
 
 ### Changed
-- The published container image now listens on all addresses inside the container by default, so it answers on the published port without `server.bind` being set. The provided `compose.yaml` still publishes that port on the host's `127.0.0.1` only, so other machines can't reach it. Running from source, and the install folder, still listen on `127.0.0.1`. If your `usher.toml` for the published image sets `server.bind = "0.0.0.0:8484"`, you can remove that line; a `server.bind` in `usher.toml` still wins.
+- The published container image now listens on all addresses inside the container by default, so it answers on the published port without `server.bind` being set. The provided `compose.yaml` still publishes that port on the host's `127.0.0.1` only, so other machines can't reach it. Running from source, and the install folder, still listen on `127.0.0.1`; the install folder's update is held for a manual `sudo usher-update`. If your `usher.toml` for the published image sets `server.bind = "0.0.0.0:8484"`, you can remove that line; a `server.bind` in `usher.toml` still wins.
 
 ### Fixed
 - The second line of a list row now wraps onto up to three lines instead of being cut off after one, so notes such as the recycle bin's number of days on Status → Storage are shown in full.

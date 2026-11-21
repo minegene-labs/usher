@@ -64,7 +64,7 @@ jobs:
           docker run -d --name usher-check --network host --read-only --tmpfs /tmp \
             -v "$RUNNER_TEMP/data:/data" -v "$RUNNER_TEMP/config:/config:ro" \
             -e "SONARR_API_KEY=$key_a" -e "RADARR_API_KEY=$key_a" -e "PROWLARR_API_KEY=$key_a" \
-            -e TR_PASS=x -e "JELLYFIN_API_KEY=$key_b" usher-check
+            -e TR_PASS=x -e "JELLYFIN_API_KEY=$key_b" -e USHER_BIND=127.0.0.1:8484 usher-check
           for _ in $(seq 1 30); do
             curl -fsS http://127.0.0.1:8484/healthz && exit 0
             sleep 2

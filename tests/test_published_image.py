@@ -166,6 +166,11 @@ class ListensInsideTheContainerTests(unittest.TestCase):
         self.assertIn("    network_mode: host\n", mine)
         self.assertIn("      - USHER_BIND=127.0.0.1:8484\n", mine)
 
+    def test_the_weekly_check_on_the_host_network_keeps_loopback(self):
+        text = (ROOT / ".github" / "workflows" / "weekly-checks.yml").read_text(encoding="utf-8")
+        run = re.search(r"docker run [^\n]*--network host(?:[^\n]*\\\n)*[^\n]*", text).group(0)
+        self.assertIn("-e USHER_BIND=127.0.0.1:8484", run)
+
 
 class GenericComposeTests(unittest.TestCase):
     def setUp(self):

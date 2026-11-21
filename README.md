@@ -55,7 +55,7 @@ A web app for your media server: search for a movie or show, tap **Get it**, and
 
 - A server with Linux, systemd, Docker with Docker Compose 2.20.2 or later, `git`, `curl` and Python 3.11+ (the full list is in [deploy/README.md](deploy/README.md#requirements)).
 - Jellyfin, Sonarr, Radarr, Prowlarr and Transmission already running and reachable from the server.
-- A reverse proxy with HTTPS in front of Usher, such as Caddy. Usher listens on `127.0.0.1` only.
+- A reverse proxy with HTTPS in front of Usher, such as Caddy. Usher listens on `127.0.0.1` only (the published image listens on all addresses inside its container, with its port published on `127.0.0.1` only).
 - A free TMDb token for Discover (optional).
 
 ## Supported versions
