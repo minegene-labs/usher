@@ -64,6 +64,15 @@ class NotifyTests(unittest.TestCase):
         self.run_check(snap([req(1, 4)]))
         self.assertEqual(self.sent, [])  # never twice
 
+    def test_each_item_has_its_own_tag_and_the_same_item_keeps_it(self):
+        self.run_check(snap([req(1, 2), req(2, 2, title="Other Show")]))
+        self.run_check(snap([req(1, 4)]))
+        self.run_check(snap([req(2, 4, title="Other Show")]))
+        tags = {m["title"]: m["tag"] for u, m in self.sent if u == "alex"}
+        self.assertEqual(len(tags), 2)
+        self.assertEqual(len(set(tags.values())), 2)
+        self.assertEqual(tags["Example Show is ready to watch"], "ready:Example Show is ready to watch")
+
     def test_existing_library_not_announced_then_new_episodes_are(self):
         old = [{"Id": "a", "Type": "Episode", "SeriesName": "Bluey", "ParentIndexNumber": 3, "IndexNumber": 1}]
         self.run_check(snap(), {"ready": old})
