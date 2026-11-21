@@ -1,6 +1,7 @@
 """deploy/setup.sh reads its settings from usher.toml alone; site.env only has to name the repo. It checks for every tool
 it needs before it changes anything, installs none of them, and lets Docker Compose wait for Usher to be healthy."""
 
+import os
 import shutil
 import subprocess
 import tempfile
@@ -156,3 +157,63 @@ class ToolCheckTests(unittest.TestCase):
         for version in ("2.20.2", "v2.29.1-desktop.1", "2.100.0", "5.6.1"):
             with self.subTest(version=version):
                 self.assertIn("site.env is missing", self.run_setup(FAKE_COMPOSE=version).stdout)
+
+
+@unittest.skipUnless(BASH, "needs bash")
+class SetkeyTests(unittest.TestCase):
+    """setkey, as setup.sh defines it, run on its own against an .env in a throw-away folder."""
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp)
+        self.env = self.tmp / ".env"
+        self.bin = self.tmp / "bin"
+        self.bin.mkdir()
+        text = SETUP.read_text(encoding="utf-8")
+        start = text.index("setkey() {")
+        self.func = text[start : text.index("\n}\n", start) + 3]
+
+    def setkey(self, key, value, fake_grep_status=None):
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "DIR": str(self.tmp)}
+        if fake_grep_status is not None:  # a read error: grep reports it with a status other than 1
+            (self.bin / "grep").write_text(f"#!{BASH}\nexit {fake_grep_status}\n")
+            (self.bin / "grep").chmod(0o755)
+        script = f'set -euo pipefail\n{self.func}\nsetkey "$1" "$2"\necho reached the end\n'
+        return subprocess.run([BASH, "-c", script, "x", key, value], env=env, capture_output=True, text=True, timeout=30)
+
+    def test_a_read_error_stops_and_leaves_env_as_it_was(self):
+        self.env.write_text("A=1\nB=2\n")
+        run = self.setkey("C", "3", fake_grep_status=2)
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("FAIL: can't read", run.stdout)
+        self.assertNotIn("reached the end", run.stdout)
+        self.assertEqual(self.env.read_text(), "A=1\nB=2\n")
+        self.assertFalse((self.tmp / ".env.new").exists(), "left a half-written file behind")
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root can read any file")
+    def test_an_env_that_cannot_be_opened_stops_and_is_left_as_it_was(self):
+        self.env.write_text("A=1\nB=2\n")
+        self.env.chmod(0)
+        self.addCleanup(self.env.chmod, 0o600)
+        run = self.setkey("C", "3")
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("FAIL: can't read", run.stdout)
+        self.env.chmod(0o600)
+        self.assertEqual(self.env.read_text(), "A=1\nB=2\n")
+
+    def test_a_key_is_written_to_an_empty_env(self):
+        self.env.write_text("")
+        run = self.setkey("A", "1")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(self.env.read_text(), "A=1\n")
+        self.assertEqual(self.env.stat().st_mode & 0o777, 0o600)
+
+    def test_setting_a_key_that_is_the_only_line_replaces_it(self):
+        self.env.write_text("A=old\n")
+        self.assertEqual(self.setkey("A", "new").returncode, 0)
+        self.assertEqual(self.env.read_text(), "A=new\n")
+
+    def test_setting_a_key_keeps_the_others(self):
+        self.env.write_text("A=1\nB=2\n")
+        self.assertEqual(self.setkey("B", "3").returncode, 0)
+        self.assertEqual(self.env.read_text(), "A=1\nB=3\n")

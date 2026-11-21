@@ -7,6 +7,9 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ### Changed
 - The install instructions now start with the published container image and `compose.yaml` alone, with nothing built on the server. The install folder with its helper script is described as an optional extra.
 
+### Fixed
+- `setup.sh` no longer wipes the other secrets in `.env` when it can't read the file while saving a new one. It now stops with a message and leaves `.env` as it was.
+
 ## [1.4.11]
 
 ### Added
