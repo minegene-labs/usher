@@ -104,8 +104,19 @@ RADARR_URL=$(tomlget pvr.movies url 2>/dev/null || true); RADARR_URL=${RADARR_UR
 # 3. Secrets (root only) ----------------------------------------------------------
 say "Secrets"
 touch "$DIR/.env" && chmod 600 "$DIR/.env"
-setkey() { grep -v "^$1=" "$DIR/.env" > "$DIR/.env.new" || true; printf '%s=%s\n' "$1" "$2" >> "$DIR/.env.new"
-           chmod 600 "$DIR/.env.new"; mv "$DIR/.env.new" "$DIR/.env"; }
+# setkey KEY VALUE: set one key in .env. The kept lines are read into a unique temp file first, and .env is
+# replaced only by one atomic rename after the read succeeded, so a .env that cannot be read (permissions,
+# a transient error) is left exactly as it was instead of being emptied. grep's exit 1 only means no line is
+# left (an empty .env is fine); any other status is a read error and stops setup (as in usher-update's setver).
+setkey() {
+  local tmp
+  [ -r "$DIR/.env" ] || { echo "FAIL: can't read $DIR/.env, so it is left unchanged"; return 1; }
+  tmp=$(mktemp "$DIR/.env.XXXXXX") || { echo "FAIL: can't make a temp file in $DIR"; return 1; }
+  grep -v "^$1=" "$DIR/.env" > "$tmp" || [ $? -eq 1 ] \
+    || { rm -f "$tmp"; echo "FAIL: can't read $DIR/.env, so it is left unchanged"; return 1; }
+  printf '%s=%s\n' "$1" "$2" >> "$tmp"
+  chmod 600 "$tmp" && mv -f "$tmp" "$DIR/.env"
+}
 if ! grep -q '^TR_PASS=.' "$DIR/.env"; then
   read -rsp "Transmission password (hidden): " TR_PASS; echo
   setkey TR_PASS "$TR_PASS"; unset TR_PASS
