@@ -57,7 +57,7 @@ export const Shell = (Base) => class extends Base {
     try {
       await lists.load("me", { timeout: 6000 });
       this.offlineShown = false;
-      if (updater.stale(store.me.version)) return updater.apply(store.me.version);
+      if (updater.stale(store.me.build)) return updater.apply(store.me.build);
       // The last copies of this account's lists and Home, so the first screen paints at once; never held up for long.
       await Promise.race([lists.restore(), new Promise((resolve) => setTimeout(resolve, 300))]);
       this.start();
@@ -78,15 +78,15 @@ export const Shell = (Base) => class extends Base {
   async checkVersion(resumed = false) {
     let me;
     try { me = await lists.load("me"); } catch { return; }
-    if (!updater.stale(me.version)) return;
-    if (resumed && !this.sheet && !document.activeElement?.matches?.("input, select, textarea")) return updater.apply(me.version);
-    this.updateBanner(me.version);
+    if (!updater.stale(me.build)) return;
+    if (resumed && !this.sheet && !document.activeElement?.matches?.("input, select, textarea")) return updater.apply(me.build);
+    this.updateBanner(me.build);
   }
 
-  updateBanner(version) {
+  updateBanner(build) {
     if (document.querySelector(".update-banner")) return;
-    const bar = h("div", { class: "update-banner", role: "status" }, h("span", {}, `Usher ${version} is ready.`),
-      h("button", { class: "link", onclick: () => updater.apply(version) }, "Reload"));
+    const bar = h("div", { class: "update-banner", role: "status" }, h("span", {}, "A new version of Usher is ready."),
+      h("button", { class: "link", onclick: () => updater.apply(build) }, "Reload"));
     document.body.append(bar);
   }
 

@@ -39,8 +39,8 @@ Intro.
 """
 FILES = {
     "usher/__init__.py": '"""Usher."""\n\n__version__ = "1.4.2"\n',
-    "web/sw.js": '// service worker\nconst VERSION = "usher-__USHER_VERSION__";\n',  # the server writes the version in: left alone
-    "web/updater.js": '// updates\nexport const BUILD = "__USHER_VERSION__";\n',
+    "web/sw.js": '// service worker\nconst VERSION = "usher-__USHER_BUILD__";\n',  # the server writes the version in: left alone
+    "web/updater.js": '// updates\nexport const BUILD = "__USHER_BUILD__";\n',
 }
 
 

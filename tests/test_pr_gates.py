@@ -240,8 +240,8 @@ class StepTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder)
         self.repo = self.folder / "repo"
         for name, text in {
-            "web/sw.js": 'const VERSION = "usher-__USHER_VERSION__";\nconst SHELL = ["/", "/app.js"];\n',
-            "web/updater.js": 'export const BUILD = "__USHER_VERSION__";\n',
+            "web/sw.js": 'const VERSION = "usher-__USHER_BUILD__";\nconst SHELL = ["/", "/app.js"];\n',
+            "web/updater.js": 'export const BUILD = "__USHER_BUILD__";\n',
             "usher/__init__.py": '__version__ = "1.0.0"\n',
             "README.md": "Example\n",
         }.items():

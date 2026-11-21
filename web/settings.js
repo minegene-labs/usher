@@ -151,12 +151,12 @@ export const Settings = (Base) => class extends Base {
   aboutSection() {
     return h("section", { class: "section about" }, h("div", { class: "section-head" }, h("h2", {}, "About")),
       h("div", { class: "about-app" }, h("img", { src: "/icons/icon-192.png", alt: "", class: "about-icon" }),
-        h("div", {}, h("div", { class: "title" }, "Usher"), h("div", { class: "footnote" }, `Version ${BUILD}`))),
+        h("div", {}, h("div", { class: "title" }, "Usher"), h("div", { class: "footnote" }, `Version ${BUILD.replace("+", " · build ")}`))),
       h("div", { class: "list" }, this.updatesRow(),
         h("button", { class: "row", onclick: () => this.openChangelog() }, h("span", { "aria-hidden": "true" }),
           h("div", { class: "text" }, h("div", { class: "title" }, "Changelog")),
           h("span", { class: "chev" }, icon("chevron")))),
-      h("button", { class: "link-btn", onclick: () => updater.apply(store.me.version) }, "Reload the app"),
+      h("button", { class: "link-btn", onclick: () => updater.apply(store.me.build) }, "Reload the app"),
       h("div", { class: "about-credit" }, h("img", { src: "/icons/tmdb.svg", alt: "TMDB", class: "about-tmdb" }),
         h("p", { class: "footnote" }, "This product uses the TMDB API but is not endorsed or certified by TMDB.")),
       h("p", { class: "footnote" }, "Where to watch: streaming data by JustWatch."));

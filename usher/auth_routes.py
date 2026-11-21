@@ -5,6 +5,7 @@ from http import HTTPStatus
 
 from . import __version__, config
 from .auth import token_hash
+from .stamp import build_id
 
 log = logging.getLogger("usher")
 
@@ -50,6 +51,7 @@ class AuthRoutes:
             "jellyfinApp": self.app.jf.app_link(),
             "familyFriendly": self.app.actions.family_enabled(),
             "version": __version__,
+            "build": build_id(self.app.s.web_dir),  # the app's files as served: a phone on another build reloads
         }
 
     def me(self, s):

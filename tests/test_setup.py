@@ -211,7 +211,7 @@ class WebCase(Case):
             store=self.store,
             auth=self.auth,
             setup=self.setup,
-            s=SimpleNamespace(trusted_proxies=(), public_origin=self.ORIGIN),
+            s=SimpleNamespace(trusted_proxies=(), public_origin=self.ORIGIN, web_dir=Path(__file__).resolve().parent.parent / "web"),
             origin_host="",
             jf=mock.Mock(app_link=mock.Mock(return_value="")),
             actions=mock.Mock(family_enabled=mock.Mock(return_value=False)),
@@ -296,6 +296,7 @@ class SetupPageTests(WebCase):
         token, csrf = self.sign_up()
         status, me, _ = self.call("/api/me", cookie=token)
         self.assertEqual((status, me["username"], me["name"], me["admin"]), (200, "sam", "Sam", True))
+        self.assertRegex(me["build"], r"^\d+\.\d+\.\d+\+[0-9a-f]{8}$")  # what the app compares with its own build
         self.assertTrue(self.auth.session(token))
 
     def test_the_password_is_never_in_the_answer_or_the_log(self):

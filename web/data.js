@@ -113,12 +113,12 @@ export const lists = {
   // ---- the last copies, kept on the device ----------------------------------------------------
   // The saved lists and the live state (`snap`: Home and Status) are written to Cache Storage, at most once every
   // SAVE_EVERY per list, so the next time the app opens they are drawn at once and refreshed in the background.
-  // Each copy names its account and version. It is shown only once the server has confirmed the session (`me`), only to
-  // the same account and version, and signing out (or another account) deletes every copy, artwork included.
+  // Each copy names its account and build. It is shown only once the server has confirmed the session (`me`), only to
+  // the same account and build, and signing out (or another account) deletes every copy, artwork included.
   save(name, data) {
     if (typeof caches === "undefined" || store.me?.account == null) return;
     const first = !unsaved.has(name);
-    unsaved.set(name, { account: store.me.account, version: store.me.version, at: Date.now(), data });
+    unsaved.set(name, { account: store.me.account, build: store.me.build, at: Date.now(), data });
     if (first) setTimeout(() => this.write(name), SAVE_EVERY);
   },
 
@@ -141,7 +141,7 @@ export const lists = {
     }
   },
 
-  // After `me`: the last copies of this account and version, drawn until the server's arrive. Never fresh, so the first
+  // After `me`: the last copies of this account and build, drawn until the server's arrive. Never fresh, so the first
   // screen that shows one asks for it again at once.
   async restore() {
     const me = store.me;
@@ -159,7 +159,7 @@ export const lists = {
     if (copies.some((c) => c && c.account !== me.account)) return this.forget();   // another account's: never shown
     names.forEach((name, i) => {
       const c = copies[i];
-      if (!c || c.version !== me.version || Date.now() - c.at > SAVED_FOR || store[name] != null) return;
+      if (!c || c.build !== me.build || Date.now() - c.at > SAVED_FOR || store[name] != null) return;
       store[name] = c.data;
       if (name !== "snap") state(name).at = 0;
     });
