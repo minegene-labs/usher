@@ -195,7 +195,10 @@ class Notifier:
             mine = [e for e in fresh if prefs[e["kind"]]]
             if len(mine) == 1:
                 e = mine[0]
-                self._send(user, {"title": e["title"], "body": e["body"], "url": e["url"], "badge": badge, "tag": e["kind"]}, topic=e["title"])
+                # One tag per item: a shared tag would make the phone replace a notification still on screen, silently.
+                self._send(
+                    user, {"title": e["title"], "body": e["body"], "url": e["url"], "badge": badge, "tag": f"{e['kind']}:{e['title']}"}, topic=e["title"]
+                )
             elif mine:
                 self._send(
                     user,
