@@ -126,8 +126,8 @@ jobs:
         # device, the workflows, the Dockerfile, compose files or deploy/, or of more than 300 lines; and a change
         # under tests/ (or a reason) for a change to the app; a line in CHANGELOG.md (or a "Changelog: not needed"
         # reason) for a change to usher/, web/, deploy/ or a Dockerfile, while a change to only the project's own
-        # workings or its documentation leaves CHANGELOG.md alone. A change to web/sw.js beyond its version line counts
-        # as sensitive, so a real service worker change always needs the reviewer.
+        # workings or its documentation leaves CHANGELOG.md alone. A change to web/sw.js counts as sensitive, so a
+        # service worker change always needs the reviewer.
         # Dependabot's pull requests name no issue and only change versions, so they skip it. The author is checked,
         # not who started the run, so someone editing a Dependabot pull request doesn't bring the rules back.
         if: github.event_name == 'pull_request' && github.event.pull_request.user.login != 'dependabot[bot]'

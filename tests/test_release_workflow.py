@@ -134,7 +134,7 @@ class PrepareTests(unittest.TestCase):
 
     def test_it_commits_only_the_files_the_script_edits_with_no_force(self):
         step = _step(self.job, "Commit and push to main")
-        self.assertIn("git add CHANGELOG.md usher/__init__.py web/sw.js web/updater.js", step)
+        self.assertIn("git add CHANGELOG.md usher/__init__.py", step)
         self.assertIn('git commit -m "chore(release): version $VERSION"', step)
         self.assertNotRegex(step, r"--force|\s-f\s|--no-verify|git add (-A|\.)")
         self.assertIn('echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"', step)
@@ -241,13 +241,13 @@ class PushStepTests(unittest.TestCase):
         remote, work = Path(folder) / "remote.git", Path(folder) / "work"
         subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(remote)], check=True)
         subprocess.run(["git", "clone", "-q", str(remote), str(work)], check=True, capture_output=True)
-        for name in ("CHANGELOG.md", "usher/__init__.py", "web/sw.js", "web/updater.js"):
+        for name in ("CHANGELOG.md", "usher/__init__.py"):
             (work / name).parent.mkdir(exist_ok=True)
             (work / name).write_text("first\n", encoding="utf-8")
         self.git(work, "add", ".")
         self.git(work, "commit", "-q", "-m", "first")
         self.git(work, "push", "-q", "origin", "HEAD:refs/heads/main")
-        for name in ("CHANGELOG.md", "usher/__init__.py", "web/sw.js", "web/updater.js"):
+        for name in ("CHANGELOG.md", "usher/__init__.py"):
             (work / name).write_text("released\n", encoding="utf-8")
         return remote, work
 

@@ -1,6 +1,6 @@
-// Usher — updates: BUILD must match usher/__init__.py and sw.js (a test checks).
-// ---- updates: this file's version must match usher/__init__.py and sw.js (a test checks) ------
-export const BUILD = "1.4.10";
+// Usher — updates. The server writes its own version over the placeholder when it serves this file (usher/stamp.py),
+// so BUILD is the version of the server that sent it and no pull request ever edits it.
+export const BUILD = "__USHER_VERSION__";
 export const updater = {
   // True when the server runs a different Usher from the one on screen, unless a reload to that
   // version already happened this session (so a mismatch can never loop).

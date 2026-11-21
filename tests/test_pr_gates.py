@@ -26,8 +26,8 @@ gates = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(gates)
 
 
-def check(changed, text, bumps=(), changelog_added=None):
-    return gates.problems(changed, set(bumps), text, changelog_added)
+def check(changed, text, changelog_added=None):
+    return gates.problems(changed, text, changelog_added)
 
 
 class PullRequestTextTests(unittest.TestCase):
@@ -91,15 +91,6 @@ class ReviewerLineTests(unittest.TestCase):
         self.assertIn("it changes 301 lines", found[0])
         self.assertEqual(check({"README.md": 200, "docs/features.md": 101}, REVIEWED), [])
 
-    def test_a_version_bump_alone_is_not_sensitive(self):
-        bump = {"web/sw.js": 2, "web/updater.js": 2, "usher/__init__.py": 2, "CHANGELOG.md": 4}
-        self.assertEqual(check(bump, GOOD, bumps=("web/sw.js", "web/updater.js", "usher/__init__.py")), [])
-        # The same files changed beyond their version line are sensitive and app code.
-        found = check(bump, GOOD, bumps=("usher/__init__.py",))
-        self.assertEqual(len(found), 2)
-        self.assertIn("web/sw.js, web/updater.js", found[0])
-        self.assertIn("nothing under tests/", found[1])
-
     def test_a_printed_path_cannot_start_a_workflow_command(self):
         found = check({"deploy/x\n::error::y": 1}, GOOD)
         self.assertEqual(len(found), 1)
@@ -152,13 +143,6 @@ class ChangelogTests(unittest.TestCase):
 
     def test_a_documentation_only_change_that_leaves_the_changelog_alone_passes(self):
         self.assertEqual(check({"README.md": 5, "docs/features.md": 5, "CONTRIBUTING.md": 2}, PLAIN), [])
-
-    def test_a_version_bump_alone_does_not_make_a_tests_change_noticeable(self):
-        bump = {"web/sw.js": 2, "web/updater.js": 2, "usher/__init__.py": 2, "tests/test_x.py": 5}
-        self.assertEqual(check(bump, PLAIN, bumps=("web/sw.js", "web/updater.js", "usher/__init__.py")), [])
-        found = check({**bump, "CHANGELOG.md": 4}, PLAIN, bumps=("web/sw.js", "web/updater.js", "usher/__init__.py"))
-        self.assertEqual(len(found), 1)
-        self.assertIn("CHANGELOG.md stays unchanged", found[0])
 
     def test_a_change_to_the_app_needs_a_line_or_a_reason(self):
         for path in ("usher/tidy.py", "web/home.js", "deploy/usher.example.toml", "deploy/README.md", "Dockerfile"):
@@ -229,12 +213,8 @@ class DeviceStorageListTests(unittest.TestCase):
         self.assertEqual(found, set(gates.ON_DEVICE), "keep ON_DEVICE in .github/scripts/pr_gates.py in step")
 
     def test_sign_in_modules_exist(self):
-        for path in gates.SIGN_IN + tuple(gates.VERSION_LINES):
+        for path in gates.SIGN_IN:
             self.assertTrue((ROOT / path).is_file(), path)
-
-    def test_version_lines_match_the_files_today(self):
-        for path, line in gates.VERSION_LINES.items():
-            self.assertRegex((ROOT / path).read_text(encoding="utf-8"), f"(?m)^{line.pattern}$", path)
 
 
 GIT_ENV = {
@@ -260,8 +240,8 @@ class StepTests(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder)
         self.repo = self.folder / "repo"
         for name, text in {
-            "web/sw.js": 'const VERSION = "usher-1.0.0";\nconst SHELL = ["/", "/app.js"];\n',
-            "web/updater.js": 'export const BUILD = "1.0.0";\n',
+            "web/sw.js": 'const VERSION = "usher-__USHER_VERSION__";\nconst SHELL = ["/", "/app.js"];\n',
+            "web/updater.js": 'export const BUILD = "__USHER_VERSION__";\n',
             "usher/__init__.py": '__version__ = "1.0.0"\n',
             "README.md": "Example\n",
         }.items():
@@ -285,11 +265,6 @@ class StepTests(unittest.TestCase):
         path = self.repo / name
         path.write_text(path.read_text(encoding="utf-8").replace(old, new), encoding="utf-8")
 
-    def bump(self):
-        self.edit("web/sw.js", "usher-1.0.0", "usher-1.0.1")
-        self.edit("web/updater.js", '"1.0.0"', '"1.0.1"')
-        self.edit("usher/__init__.py", '"1.0.0"', '"1.0.1"')
-
     def run_step(self, text):
         head = self.commit()
         fake = self.folder / "bin" / "gh"
@@ -312,25 +287,22 @@ class StepTests(unittest.TestCase):
         return subprocess.run(cmd, cwd=self.repo, env=env, capture_output=True, text=True, check=False)
 
     def test_a_service_worker_change_without_reviewer_ran_fails(self):
-        self.bump()
         self.edit("web/sw.js", '"/app.js"]', '"/app.js", "/home.js"]')
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("# a test\n", encoding="utf-8")
         result = self.run_step(GOOD)
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
         self.assertIn("::error::No `Reviewer: ran` line, and it touches web/sw.js:", result.stdout)
-        self.assertNotIn("updater.js", result.stdout)  # that one only changed its version line
+        self.assertNotIn("updater.js", result.stdout)  # that one is unchanged
 
-    def test_the_same_change_with_reviewer_ran_passes(self):
-        self.bump()
+    def test_the_same_change_with_reviewer_ran_passes_without_touching_the_version(self):
         self.edit("web/sw.js", '"/app.js"]', '"/app.js", "/home.js"]')
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("# a test\n", encoding="utf-8")
         result = self.run_step(REVIEWED)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_a_version_bump_with_a_docs_change_needs_neither_line(self):
-        self.bump()
+    def test_a_docs_change_needs_neither_line(self):
         self.edit("README.md", "Example", "Example, explained")
         result = self.run_step(GOOD)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -346,7 +318,6 @@ class StepTests(unittest.TestCase):
         self.assertIn("it touches deploy/notes.md", result.stdout)
 
     def test_a_tests_only_change_that_edits_the_changelog_fails(self):
-        self.bump()
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("# a test\n", encoding="utf-8")
         (self.repo / "CHANGELOG.md").write_text("# Changelog\n- A line.\n", encoding="utf-8")
@@ -355,7 +326,6 @@ class StepTests(unittest.TestCase):
         self.assertIn("::error::It changes only files that describe how the project is run", result.stdout)
 
     def test_a_tests_only_change_that_leaves_the_changelog_alone_passes(self):
-        self.bump()
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("# a test\n", encoding="utf-8")
         result = self.run_step(PLAIN)
@@ -364,7 +334,6 @@ class StepTests(unittest.TestCase):
     def test_an_app_change_needs_a_changelog_line_that_is_really_added(self):
         (self.repo / "CHANGELOG.md").write_text("# Changelog\n- Old line.\n", encoding="utf-8")
         self.base = self.commit()
-        self.bump()
         (self.repo / "tests").mkdir()
         (self.repo / "tests" / "test_x.py").write_text("# a test\n", encoding="utf-8")
         self.edit("web/sw.js", '"/app.js"]', '"/app.js", "/home.js"]')

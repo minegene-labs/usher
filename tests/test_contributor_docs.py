@@ -69,8 +69,13 @@ class IssueWorkTests(unittest.TestCase):
             self.assertNotRegex(cmd, r"^gh (issue|pr) ", cmd)  # GraphQL, which sessions can't reach
 
     def test_small_related_issues_may_share_a_pull_request(self):
-        for phrase in ("`issue-<n>-<m>-<slug>`", "one version bump", "a `Fixes #<n>` line and a test for each issue", "the biggest bump"):
+        for phrase in ("`issue-<n>-<m>-<slug>`", "a `Fixes #<n>` line and a test for each issue"):
             self.assertIn(phrase, self.text)
+
+    def test_a_pull_request_leaves_the_version_alone(self):
+        self.assertIn("Leave the version alone.", self.text)
+        self.assertNotIn("version bump", self.text)
+        self.assertNotIn("Bump the version", self.text)
 
     def test_asks_before_changing_an_unclear_issue(self):
         self.assertIn("unclear or contradicts the code, ask", self.text)

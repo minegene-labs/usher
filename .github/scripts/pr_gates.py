@@ -10,9 +10,8 @@ Dependabot's; tests/test_pr_gates.py has the cases.
   to usher/, web/, deploy/ or a Dockerfile adds a line to it, or carries a `Changelog: not needed — <reason>` line;
   a change to only .github/, tests/, .claude/ or documentation leaves it unchanged.
 
-Every pull request bumps the version in the three VERSION_LINES files. A change to one of them that touches only
-its version line is a bump: neither sensitive nor app code. Any other change to web/sw.js or web/updater.js is both,
-so a real change to the service worker still needs `Reviewer: ran` and a test.
+A pull request leaves the version alone: it is written once, in usher/__init__.py, and only the release changes it.
+A change to web/sw.js or web/updater.js is sensitive and app code, so it needs `Reviewer: ran` and a test.
 
 Usage: python3 .github/scripts/pr_gates.py BASE HEAD TEXT_FILE (run from the repository root)
 """
@@ -39,11 +38,6 @@ SENSITIVE_FILES = (
     "requirements-dev.txt",
 )
 SENSITIVE_NAMES = re.compile(r"(^|/)(Dockerfile[^/]*|(docker-)?compose(\.[\w-]+)?\.ya?ml)$")
-VERSION_LINES = {
-    "usher/__init__.py": re.compile(r'__version__ = "[0-9.]+"'),
-    "web/sw.js": re.compile(r'const VERSION = "usher-[0-9.]+";'),
-    "web/updater.js": re.compile(r'export const BUILD = "[0-9.]+";'),
-}
 APP_DIRS = ("usher/", "web/")
 CHANGELOG = "CHANGELOG.md"
 # What a person using or installing Usher can notice: the app, the container and the server's files.
@@ -77,17 +71,16 @@ def shown(path):
     return re.sub(r"[^\w./ -]", "?", path)
 
 
-def problems(changed, bumps, text, changelog_added=None):
+def problems(changed, text, changelog_added=None):
     """Messages for each line the text is missing. `changed` maps each changed path to its changed lines;
-    `bumps` holds the version files whose only change is their version line; `changelog_added` says whether
-    CHANGELOG.md gained a line (by default: whether it changed at all)."""
+    `changelog_added` says whether CHANGELOG.md gained a line (by default: whether it changed at all)."""
     text = re.sub(r"<!--.*?-->", "", text.replace("\r", ""), flags=re.S)  # the template's instructions don't count
     found = []
     if not FIXES.search(text):
         found.append("No `Fixes #<n>` line: name the issue this pull request fixes.")
     if not SCREEN.search(text):
         found.append("No `Changes how a screen looks: yes` or `Changes how a screen looks: no` line: a change to how a screen looks is checked on a phone.")
-    real = sorted(p for p in changed if p not in bumps)
+    real = sorted(changed)
     sensitive = [p for p in real if is_sensitive(p)]
     total = sum(changed.values())
     if (sensitive or total > LARGE) and not REVIEWER.search(text):
@@ -147,20 +140,11 @@ def changelog_gained_a_line(base, head):
     return bool(out) and out[0].isdigit() and int(out[0]) > 0
 
 
-def is_version_bump(base, head, path):
-    """Whether every line the diff adds or removes in `path` is its version line."""
-    diff = git("diff", "-U0", f"{base}...{head}", "--", path).splitlines()
-    body = diff[next((i for i, line in enumerate(diff) if line.startswith("@@")), len(diff)) :]
-    edits = [line[1:] for line in body if line and line[0] in "+-"]
-    return bool(edits) and all(VERSION_LINES[path].fullmatch(line) for line in edits)
-
-
 def main(argv):
     base, head, text_file = argv
     changed = changed_lines(base, head)
-    bumps = {p for p in VERSION_LINES if p in changed and is_version_bump(base, head, p)}
     with open(text_file, encoding="utf-8") as f:
-        found = problems(changed, bumps, f.read(), changelog_gained_a_line(base, head))
+        found = problems(changed, f.read(), changelog_gained_a_line(base, head))
     for message in found:
         print(f"::error::{message}")
     if not found:

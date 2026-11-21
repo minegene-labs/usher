@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from . import __version__, artwork, config
+from .stamp import etag as file_etag, stamp
 from .auth import COOKIE, Auth
 from .actions import Actions, Problem
 from .auth_routes import AuthRoutes, describe_device
@@ -422,7 +423,8 @@ class Handler(AuthRoutes, SetupRoutes, ConnectRoutes, NotifyRoutes, OpinionRoute
             # Unknown paths load the app, which handles its own screens.
             f = root / "index.html"
         st = f.stat()
-        etag = f'"{int(st.st_mtime)}-{st.st_size}"'
+        rel = f.relative_to(root).as_posix()
+        etag = file_etag(rel, st)
         headers = {"ETag": etag, "Cache-Control": "no-cache", "Last-Modified": email.utils.formatdate(st.st_mtime, usegmt=True)}
         if self.headers.get("If-None-Match") == etag:
             self.send_response(304)
@@ -431,7 +433,7 @@ class Handler(AuthRoutes, SetupRoutes, ConnectRoutes, NotifyRoutes, OpinionRoute
             self.send_header("Content-Length", "0")
             return self.end_headers()
         ctype = "application/manifest+json" if f.suffix == ".webmanifest" else (mimetypes.guess_type(f.name)[0] or "application/octet-stream")
-        return self.send(200, f.read_bytes(), ctype=ctype, headers=headers)
+        return self.send(200, stamp(rel, f.read_bytes()), ctype=ctype, headers=headers)
 
 
 class Server(ThreadingHTTPServer):

@@ -42,7 +42,7 @@ def merge(**changes):
         "dependabot": False,
         "body": BODY,
         "version": "1.2.0",
-        "previous_version": "1.1.0",
+        "previous_version": "1.2.0",
         "stable": "identical",
         "issues": {7: "closed"},
         "files": [{"filename": "README.md", "patch": "@@ -1 +1 @@\n-a\n+b"}],
@@ -75,7 +75,7 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(len(checks), len(report_mod.CHECKS))
         self.assertFalse([entry for entry in checks if entry.startswith("- **problem**")])
         self.assertEqual("- **ok**: The promote job finished.", line(lines, "promote job"))
-        self.assertIn("The version changed to 1.2.0.", line(lines, "version"))
+        self.assertIn("The version stays 1.2.0", line(lines, "version"))
         self.assertIn("`stable` is at the merge commit.", line(lines, "`stable`"))
         self.assertIn("The issue it fixes is closed: #7.", line(lines, "fixes"))
         self.assertEqual("- **info**: Files flagged: none.", line(lines, "Files flagged"))
@@ -177,10 +177,8 @@ class FlaggedFileTests(unittest.TestCase):
         for path in ("web/app.js", "usher/server.py", ".github/scripts/pr_gates.py", "docs/deploy.md", "tests/test_x.py"):
             self.assertFalse(report_mod.is_flagged({"filename": path, "patch": None}), path)
 
-    def test_a_service_worker_version_bump_alone_is_not_flagged(self):
-        bump = '@@ -4 +4 @@\n-const VERSION = "usher-1.1.0";\n+const VERSION = "usher-1.2.0";'
-        self.assertFalse(report_mod.is_flagged({"filename": "web/sw.js", "patch": bump}))
-        self.assertTrue(report_mod.is_flagged({"filename": "web/sw.js", "patch": bump + "\n+self.skipWaiting();"}))
+    def test_a_service_worker_change_is_always_flagged(self):
+        self.assertTrue(report_mod.is_flagged({"filename": "web/sw.js", "patch": "@@ -4 +4 @@\n-const A = 1;\n+const A = 2;"}))
         self.assertTrue(report_mod.is_flagged({"filename": "web/sw.js", "patch": None}))  # a diff too large to show
 
     def test_paths_are_made_safe_and_the_list_is_capped(self):
@@ -192,33 +190,18 @@ class FlaggedFileTests(unittest.TestCase):
 
 
 class VersionTests(unittest.TestCase):
-    """The version is the build number that makes a device drop its saved copy of the app."""
+    """Only a release sets the version, so a merge is never faulted for keeping it."""
 
-    def test_a_bump_is_ok(self):
-        verdict, lines = run(files=[{"filename": "usher/server.py"}])
+    def test_a_merge_that_keeps_the_version_is_ok_whatever_it_changed(self):
+        for path in ("usher/server.py", "web/app.css", "deploy/compose.yaml", "Dockerfile", "tests/test_basics.py", "requirements.txt", "README.md"):
+            verdict, lines = run(files=[{"filename": path}])
+            self.assertEqual(verdict, "OK", path)
+            self.assertEqual("- **ok**: The version stays 1.2.0: a release gives the collected changes their version.", line(lines, "version"))
+
+    def test_a_changed_version_is_shown_not_faulted(self):
+        verdict, lines = run(previous_version="1.1.0", files=[{"filename": "usher/__init__.py"}])
         self.assertEqual(verdict, "OK")
-        self.assertEqual("- **ok**: The version changed to 1.2.0.", line(lines, "version"))
-
-    def test_an_unchanged_version_is_a_problem_when_the_app_changed(self):
-        for path in ("usher/server.py", "web/app.css", "deploy/compose.yaml", "Dockerfile", "tests/test_basics.py", "requirements.txt", "CHANGELOG.md"):
-            verdict, lines = run(previous_version="1.2.0", files=[{"filename": "README.md"}, {"filename": path}])
-            self.assertEqual(verdict, "PROBLEM", path)
-            self.assertIn("**problem**: The version is still 1.2.0: it wasn't bumped", line(lines, "version"))
-
-    def test_a_merge_that_changes_no_app_code_needs_no_new_version(self):
-        for paths in (["README.md"], ["docs/architecture.md", ".claude/settings.json", ".github/workflows/promote.yml", "LICENSE"]):
-            verdict, lines = run(previous_version="1.2.0", files=[{"filename": p} for p in paths])
-            self.assertEqual(verdict, "OK", paths)
-            self.assertIn("no new version is needed", line(lines, "version"))
-
-    def test_moving_a_file_out_of_the_app_counts_as_changing_it(self):
-        files = [{"filename": "docs/old-server.md", "previous_filename": "usher/server.py"}]
-        self.assertEqual(run(previous_version="1.2.0", files=files)[0], "PROBLEM")
-
-    def test_dependabots_updates_keep_the_version(self):
-        verdict, lines = run(dependabot=True, issues={}, previous_version="1.2.0", files=[{"filename": "requirements.txt"}])
-        self.assertEqual(verdict, "OK")
-        self.assertIn("**info**: The version stays 1.2.0: Dependabot's updates keep it.", line(lines, "version"))
+        self.assertEqual("- **info**: The version changed to 1.2.0: only a release sets it.", line(lines, "version"))
 
     def test_no_version_found(self):
         self.assertEqual(run(version=None)[0], "PROBLEM")

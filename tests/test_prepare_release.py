@@ -39,8 +39,8 @@ Intro.
 """
 FILES = {
     "usher/__init__.py": '"""Usher."""\n\n__version__ = "1.4.2"\n',
-    "web/sw.js": '// service worker\nconst VERSION = "usher-1.4.2";\nconst OTHER = "usher-9.9.9";\n',
-    "web/updater.js": '// updates\nexport const BUILD = "1.4.2";\n',
+    "web/sw.js": '// service worker\nconst VERSION = "usher-__USHER_VERSION__";\n',  # the server writes the version in: left alone
+    "web/updater.js": '// updates\nexport const BUILD = "__USHER_VERSION__";\n',
 }
 
 
@@ -128,36 +128,26 @@ class VersionTests(unittest.TestCase):
     def test_tags_that_are_not_releases_are_ignored(self):
         self.check("1.4.3", tags=("v1.4.0", "stable", "nightly-9.9.9", "v2.0.0-beta", "release-v8"))
 
-    def test_the_version_lines_are_set_and_nothing_else(self):
-        for path, text in FILES.items():
-            out = script.set_version(path, text, "1.5.0")
-            self.assertIn("1.5.0", out)
-            self.assertNotIn("1.4.2", out)
-        self.assertIn('const OTHER = "usher-9.9.9";', script.set_version("web/sw.js", FILES["web/sw.js"], "1.5.0"))
+    def test_the_version_line_is_set_and_nothing_else(self):
+        out = script.set_version(FILES["usher/__init__.py"], "1.5.0")
+        self.assertEqual(out, '"""Usher."""\n\n__version__ = "1.5.0"\n')
 
     def test_a_file_without_exactly_one_version_line_is_an_error(self):
         with self.assertRaises(ValueError):
-            script.set_version("web/updater.js", "export const BUILD = 1;\n", "1.5.0")
+            script.set_version("no version here\n", "1.5.0")
         with self.assertRaises(ValueError):
-            script.set_version("web/updater.js", FILES["web/updater.js"] * 2, "1.5.0")
-
-    def test_the_lines_match_the_ones_the_pull_request_gate_treats_as_a_bump(self):
-        gates = importlib.util.spec_from_file_location("pr_gates", ROOT / ".github" / "scripts" / "pr_gates.py")
-        pr_gates = importlib.util.module_from_spec(gates)
-        gates.loader.exec_module(pr_gates)
-        for path, (_, template) in script.VERSION_LINES.items():
-            self.assertTrue(pr_gates.VERSION_LINES[path].fullmatch(template.format("1.5.0")), path)
+            script.set_version(FILES["usher/__init__.py"] * 2, "1.5.0")
 
 
 class PrepareTests(unittest.TestCase):
-    def test_edits_the_changelog_and_the_three_version_files(self):
+    def test_edits_the_changelog_and_the_version_and_leaves_the_web_files_alone(self):
         with tempfile.TemporaryDirectory() as folder:
             root = make_tree(folder)
             self.assertTrue(script.prepare(root, "1.5.0", ["v1.4.0"]))
             self.assertEqual(parse((root / "CHANGELOG.md").read_text(encoding="utf-8"))[0]["version"], "1.5.0")
             self.assertIn('__version__ = "1.5.0"', (root / "usher/__init__.py").read_text(encoding="utf-8"))
-            self.assertIn('const VERSION = "usher-1.5.0";', (root / "web/sw.js").read_text(encoding="utf-8"))
-            self.assertIn('export const BUILD = "1.5.0";', (root / "web/updater.js").read_text(encoding="utf-8"))
+            for path in ("web/sw.js", "web/updater.js"):  # the server writes the version into these when it serves them
+                self.assertEqual((root / path).read_text(encoding="utf-8"), FILES[path], path)
 
     def test_a_refused_version_changes_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -170,11 +160,11 @@ class PrepareTests(unittest.TestCase):
     def test_a_file_that_cant_be_edited_changes_nothing(self):
         with tempfile.TemporaryDirectory() as folder:
             root = make_tree(folder)
-            (root / "web/sw.js").write_text("no version here\n", encoding="utf-8")
+            (root / "usher/__init__.py").write_text("no version here\n", encoding="utf-8")
             with self.assertRaises(ValueError):
                 script.prepare(root, "1.5.0", [])
             self.assertEqual((root / "CHANGELOG.md").read_text(encoding="utf-8"), LOG)
-            self.assertIn('"1.4.2"', (root / "usher/__init__.py").read_text(encoding="utf-8"))
+            self.assertEqual((root / "usher/__init__.py").read_text(encoding="utf-8"), "no version here\n")
 
     def test_with_nothing_unreleased_the_version_still_moves_and_it_says_so(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -246,9 +236,8 @@ class CommandLineTests(unittest.TestCase):
 class RepositoryTests(unittest.TestCase):
     def test_the_repositorys_own_files_take_a_release(self):
         """The real version lines and changelog are shaped as the script expects, so a run in the workflow can't fail on that."""
-        for path in script.VERSION_LINES:
-            text = (ROOT / path).read_text(encoding="utf-8")
-            self.assertEqual(script.set_version(path, text, "99.0.0").count("99.0.0"), 1, path)
+        text = (ROOT / script.VERSION_FILE).read_text(encoding="utf-8")
+        self.assertEqual(script.set_version(text, "99.0.0").count("99.0.0"), 1)
         self.assertRegex((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.compile(r"(?m)^## \[\d"))
 
 

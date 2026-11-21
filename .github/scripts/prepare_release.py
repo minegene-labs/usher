@@ -6,7 +6,8 @@ workflow, run by hand with a version, calls this script on the tested commit. It
   (tags `v<version>`), so a release can never be overwritten or a version go backwards;
 - renames `## [Unreleased]` to `## [<version>]` and leaves a fresh, empty `## [Unreleased]` above it. With no lines
   under `[Unreleased]` the changelog stays as it is: a version with no section says it has no changes to notice;
-- sets the version in the three files that must always agree (tests/test_versions.py checks them).
+- sets `__version__` in usher/__init__.py, the one place the version is written (the server puts it into web/sw.js and
+  web/updater.js when it serves them, usher/stamp.py).
 
 It only edits files in the working tree and reads the repository's tags; the workflow commits the result. The version
 reaches it as an argument, never through a shell line built from an expression. tests/test_prepare_release.py has the
@@ -28,12 +29,9 @@ from usher.update_result import version_key  # noqa: E402  (the import needs the
 VERSION = re.compile(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}", re.ASCII)
 TAG = re.compile(r"v(\d+(?:\.\d+)*)", re.ASCII)
 UNRELEASED = "## [Unreleased]"
-# The line each file keeps its version on (the same lines .github/scripts/pr_gates.py treats as a version bump).
-VERSION_LINES = {
-    "usher/__init__.py": (re.compile(r'(?m)^__version__ = "[0-9.]+"$'), '__version__ = "{}"'),
-    "web/sw.js": (re.compile(r'(?m)^const VERSION = "usher-[0-9.]+";$'), 'const VERSION = "usher-{}";'),
-    "web/updater.js": (re.compile(r'(?m)^export const BUILD = "[0-9.]+";$'), 'export const BUILD = "{}";'),
-}
+VERSION_FILE = "usher/__init__.py"
+# The line the version is kept on.
+VERSION_LINE = (re.compile(r'(?m)^__version__ = "[0-9.]+"$'), '__version__ = "{}"')
 
 
 def check_version(version: str, current: str, tags: list[str]) -> None:
@@ -64,17 +62,17 @@ def rename_unreleased(text: str, version: str) -> str:
     return "\n".join(lines)
 
 
-def set_version(path: str, text: str, version: str) -> str:
-    """`text` of the file at `path` with its one version line set to `version`."""
-    pattern, template = VERSION_LINES[path]
+def set_version(text: str, version: str) -> str:
+    """`text` of usher/__init__.py with its one version line set to `version`."""
+    pattern, template = VERSION_LINE
     out, count = pattern.subn(template.format(version), text)
     if count != 1:
-        raise ValueError(f"{path} has {count} version lines; expected exactly one.")
+        raise ValueError(f"{VERSION_FILE} has {count} version lines; expected exactly one.")
     return out
 
 
 def current_version(root: Path) -> str:
-    found = re.search(r'(?m)^__version__ = "([0-9.]+)"$', (root / "usher/__init__.py").read_text(encoding="utf-8"))
+    found = re.search(r'(?m)^__version__ = "([0-9.]+)"$', (root / VERSION_FILE).read_text(encoding="utf-8"))
     if not found:
         raise ValueError("No __version__ found in usher/__init__.py.")
     return found[1]
@@ -91,10 +89,9 @@ def prepare(root: Path, version: str, existing_tags: list[str]) -> bool:
     changelog = root / "CHANGELOG.md"
     before = changelog.read_text(encoding="utf-8")
     after = rename_unreleased(before, version)
-    new = {path: set_version(path, (root / path).read_text(encoding="utf-8"), version) for path in VERSION_LINES}
+    new = set_version((root / VERSION_FILE).read_text(encoding="utf-8"), version)
     changelog.write_text(after, encoding="utf-8")
-    for path, text in new.items():
-        (root / path).write_text(text, encoding="utf-8")
+    (root / VERSION_FILE).write_text(new, encoding="utf-8")
     return after != before
 
 

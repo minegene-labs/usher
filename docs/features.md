@@ -83,4 +83,4 @@ A title that is in Jellyfin has one **Watch** button on its details sheet and a 
 
 ## Updates on devices
 
-The app checks the server's version when it opens and whenever it comes back to the screen. If the server runs a newer Usher, it reloads straight away when nothing is open, or shows **Usher x.y is ready · Reload** otherwise. Settings → About has **Reload the app** too. `BUILD` in `web/updater.js`, `VERSION` in `web/sw.js` and `usher/__init__.py` must match; a test checks.
+The app checks the server's version when it opens and whenever it comes back to the screen. If the server runs a newer Usher, it reloads straight away when nothing is open, or shows **Usher x.y is ready · Reload** otherwise. Settings → About has **Reload the app** too. The server writes its version into `web/updater.js` and `web/sw.js` when it serves them (`usher/stamp.py`), so the running server is the only place the version comes from.

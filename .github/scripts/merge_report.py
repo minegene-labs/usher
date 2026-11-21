@@ -7,21 +7,20 @@ tests/test_merge_report.py has the cases. A merge makes no release (the Release 
 looks at tags or images.
 
 - `promote` finished: when it failed, `stable` may not have moved.
-- The version in usher/__init__.py differs from the one before the merge (it is the build number that makes a device
-  drop its saved copy of the app). A merge that changes only documentation, `.claude/` or `.github/` files needs no
-  new version, and Dependabot's updates keep it.
+- The version in usher/__init__.py is found, and whether the merge changed it is shown (information): only a release
+  sets it, so a merge normally keeps it. The server writes it into the app's files when it serves them (usher/stamp.py).
 - `stable` is at the merge commit, or past it when a later merge was promoted since (information).
 - A merge that is superseded, with `stable` past it (a later merge was promoted while its Tests run waited, so
   promote's fast-forward push was refused), is reported as information: its promote job isn't counted against it, so
   no problem issue is opened. Every other check still counts.
 - Every issue the description fixes (`Fixes #<n>`) is closed.
 - Which changed files need a person's eye (workflows, Dockerfile, deploy/, .claude/, web/sw.js, web/data.js): shown,
-  never a problem by itself. A change to web/sw.js that only moves its version line isn't shown.
+  never a problem by itself.
 - Every open issue a maintainer has had time to triage has a priority label (P1, P2 or P3). Issues the repository
   opens by itself (labelled upstream, upstream-beta, upstream-release or vulnerabilities) and issues opened in the
   last 24 hours are left out.
 
-Dependabot's updates keep the version and fix no issue, so those lines say so instead.
+Dependabot's updates fix no issue, so that line says so instead.
 
 Usage: python3 .github/scripts/merge_report.py SHA (GH_TOKEN and GITHUB_REPOSITORY in the environment; PROMOTE, the
 result of Promote's promote job, defaults to success)
@@ -46,11 +45,6 @@ TRIAGE_TIME = datetime.timedelta(hours=24)
 FLAGGED_DIRS = (".github/workflows/", "deploy/", ".claude/")
 FLAGGED_FILES = ("web/sw.js", "web/data.js")
 DOCKERFILE = re.compile(r"(^|/)Dockerfile[^/]*$")
-# What a new version is for: the app, its container (the Dockerfile also copies requirements.txt and CHANGELOG.md, which
-# the app shows) and the tests that cover them. A phone keeps its saved copy of the app until the version changes.
-VERSIONED_DIRS = ("usher/", "web/", "deploy/", "tests/")
-VERSIONED_FILES = ("requirements.txt", "CHANGELOG.md")
-SW_VERSION_LINE = re.compile(r'const VERSION = "usher-[0-9.]+";')
 VERSION = re.compile(r'(?m)^__version__ = "([0-9]+(?:\.[0-9]+)*)"$')
 # The same words Auto-merge closes issues by.
 FIXES = re.compile(r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):? +#([0-9]+)\b")
@@ -84,25 +78,14 @@ def check_promote(merge):
     return "problem", f"The promote job didn't finish ({shown(result)}): `stable` may not have moved."
 
 
-def changes_the_app(files):
-    """Whether any changed file, at its new or its old path (a rename), is part of the app, its container or its tests."""
-    paths = [p for c in files for p in (c["filename"], c.get("previous_filename") or "")]
-    return any(p.startswith(VERSIONED_DIRS) or p in VERSIONED_FILES or DOCKERFILE.search(p) for p in paths)
-
-
 def check_version(merge):
-    """The version is a build number too: a device keeps its saved copy of the app until it changes. A release, made by
-    hand, gives the collected changes a version of its own."""
+    """Only a release, made by hand, sets the version, so a merge normally keeps it."""
     version, before = merge["version"], merge["previous_version"]
     if not version:
         return "problem", "No version found in usher/__init__.py at the merge commit."
-    if version != before:
-        return "ok", f"The version changed to {version}."
-    if merge["dependabot"]:
-        return "info", f"The version stays {version}: Dependabot's updates keep it."
-    if not changes_the_app(merge["files"]):
-        return "ok", f"The version stays {version}: this merge changes no app code, so no new version is needed."
-    return "problem", f"The version is still {version}: it wasn't bumped, so devices may keep their saved copy of the app."
+    if version != before and before:
+        return "info", f"The version changed to {version}: only a release sets it."
+    return "ok", f"The version stays {version}: a release gives the collected changes their version."
 
 
 def check_stable(merge):
@@ -136,18 +119,8 @@ def check_issues(merge):
     return "ok", f"{'The issue it fixes is' if len(numbers) == 1 else 'The issues it fixes are'} closed: {issue_list(numbers)}."
 
 
-def is_version_bump(patch):
-    """Whether every line a web/sw.js patch adds or removes is its version line."""
-    if not patch:
-        return False  # GitHub leaves the patch out of very large diffs: show the file
-    edits = [line[1:] for line in patch.splitlines() if line[:1] in "+-"]
-    return bool(edits) and all(SW_VERSION_LINE.fullmatch(line) for line in edits)
-
-
 def is_flagged(change):
     path = change["filename"]
-    if path == "web/sw.js" and is_version_bump(change.get("patch")):
-        return False
     return path in FLAGGED_FILES or path.startswith(FLAGGED_DIRS) or bool(DOCKERFILE.search(path))
 
 
