@@ -142,7 +142,10 @@ def read_facts(api, run_id, existing_tags):
     released = newest(existing_tags)
     since = datetime.datetime.fromtimestamp(int(git("log", "-1", "--format=%ct", f"v{released}^{{commit}}")), datetime.timezone.utc) if released else None
     query = "issues?state=closed&labels=needs-server" + (f"&since={since.strftime('%Y-%m-%dT%H:%M:%SZ')}" if since else "")
-    runs = api.get(f"actions/workflows/{WORKFLOW}/runs?per_page=30")["workflow_runs"]
+    found = api.get(f"actions/workflows/{WORKFLOW}/runs?per_page=30")
+    if found is None:
+        raise RuntimeError(f"GitHub has no workflow {WORKFLOW}, so another run can't be looked for")
+    runs = found["workflow_runs"]
     has_lines, added = collected((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"))
     return {
         "planned": open_planned({i["number"]: i for i in planned}.values()),

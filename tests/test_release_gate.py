@@ -225,6 +225,13 @@ class DecideTests(Repo):
             with self.assertRaises(ValueError, msg=repr(typed)):
                 self.decide(event="workflow_dispatch", typed=typed)
 
+    def test_a_missing_workflow_is_an_error_not_a_crash(self):
+        self.history()
+        api = FakeGitHub()
+        api.get = lambda path: None  # GitHub's 404
+        with self.assertRaisesRegex(RuntimeError, "no workflow release.yml"):
+            self.decide(api)
+
     def test_any_other_event_is_refused(self):
         with self.assertRaises(ValueError):
             self.decide(event="push")
