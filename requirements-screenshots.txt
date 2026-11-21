@@ -2,4 +2,4 @@
 # Installed by hand, in a virtual environment, when the pictures in README.md are redone. Not a runtime dependency:
 # a pull request's Tests run doesn't install it, and it is not in the image.
 pillow==13.0.0
-playwright==1.63.0
+playwright==1.65.2

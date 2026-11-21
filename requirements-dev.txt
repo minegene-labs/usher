@@ -1,7 +1,7 @@
 # Tools CI runs, pinned so a new release can't turn a green build red; Dependabot keeps them current.
 # Not installed in the image.
-ruff==0.17.4
-coverage==7.17.2
+ruff==0.17.5
+coverage==7.17.3
 # Workflow linters. actionlint-py installs the actionlint release binary after checking its SHA-256;
 # actionlint runs the shellcheck it finds first on PATH, this pinned one.
 actionlint-py==1.7.12.25
