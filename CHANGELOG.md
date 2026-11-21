@@ -4,6 +4,8 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [1.4.11]
+
 ### Added
 - Settings → About → Updates now tells you when a newer release is out, with a link to its notes and the command to update, ready to copy. Usher asks GitHub for the newest release once a day and installs nothing itself, since updating a container is up to the machine it runs on. Admins are told once about each new release. To turn the check off, set `check_releases = "off"` under `[updates]` in `usher.toml`; Usher then makes no request to GitHub. If GitHub can't be reached, the row says it can't check right now.
 
