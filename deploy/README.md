@@ -95,7 +95,10 @@ Its lines are in the journal: `journalctl -t usher-update` (the timer's runs als
 
 - **An install made before the repository was public** has an SSH address as its source. Switch it before reinstalling `usher-update`: set `USHER_REPO` in `site.env` to the HTTPS address and run `sudo bash setup.sh` again (it points `src/` at it), or run `sudo git -C <install folder>/src remote set-url origin https://github.com/<owner>/<repo>.git`. Then reinstall `usher-update` as below, delete `deploy_key`, `deploy_key.pub` and `known_hosts` from the install folder, and remove the deploy key in the repository's settings on GitHub.
 - **A new release:** see Updating. `sudo usher-update`, or `docker compose pull && docker compose up -d` with the new version in `USHER_VERSION`.
-- **An install that builds from source (an earlier way of installing):** its `compose.yaml` builds `usher:local` from `src/` and a timer every 15 minutes follows the `stable` branch. To move to the image, bring `src/` to the newest release and run `setup.sh` again, which replaces `compose.yaml`, `usher-update` and the units, and writes `USHER_VERSION` to `.env`. Replace `<version>` with the newest release (`git ls-remote --tags <USHER_REPO>` lists them):
+- **An install that builds from source (an earlier way of installing):** its `compose.yaml` builds `usher:local` from `src/` and a timer every 15 minutes follows the `stable` branch. Do this with the first release that has the image-based update, and not before: until then its old `usher-update` holds the change and logs "Check it, then run: sudo usher-update", which you should not follow, because that old script would install the new `compose.yaml` without pulling the image or replacing itself. Instead, stop the old timer so it can't reset `src/` underneath you, bring `src/` to the release and run `setup.sh` again, which replaces `compose.yaml`, `usher-update` and the units, writes `USHER_VERSION` to `.env` and pulls that version's image. Replace `<version>` with the release (`git ls-remote --tags <USHER_REPO>` lists them):
+  ```bash
+  sudo systemctl disable --now usher-autodeploy.timer
+  ```
   ```bash
   sudo git -C /opt/usher/src fetch --depth 1 origin tag v<version>
   ```
@@ -105,7 +108,7 @@ Its lines are in the journal: `journalctl -t usher-update` (the timer's runs als
   ```bash
   sudo bash /opt/usher/src/deploy/setup.sh
   ```
-  If the timer was on, it stays on and now runs once a day and installs releases only; turn it off with `sudo systemctl disable --now usher-autodeploy.timer` if you don't want that. The images this machine built before (`usher:local`, `usher:prev`) can go: `sudo docker image rm usher:local usher:prev`.
+  `setup.sh` leaves the old timer off, since automatic updates are now optional (see Updating); turn the daily one on if you want it. The images this machine built before (`usher:local`, `usher:prev`) can go: `sudo docker image rm usher:local usher:prev`.
 - **A change to `usher-update`, the units or `setup.sh`:** they aren't updated by an update. Bring `src/` to the release that has the change as above and run `sudo bash /opt/usher/src/deploy/setup.sh` again, or reinstall them by hand:
   ```bash
   sudo install -m 755 /opt/usher/src/deploy/usher-update /usr/local/bin/usher-update

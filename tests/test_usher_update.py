@@ -140,6 +140,36 @@ class UsherUpdateTests(unittest.TestCase):
         self.assertEqual(self.run_update("--auto", tags="v1.2.0", GIT_SSH_COMMAND="ssh -i /nonexistent").returncode, 0)
         self.assertFalse(self.calls("ssh"))
 
+    def test_an_argument_it_does_not_know_does_not_start_an_update(self):
+        """An old timer unit still passes --if-changed; that must not turn into an update by hand."""
+        run = self.run_update("--if-changed")
+        self.assertEqual(run.returncode, 2)
+        self.assertIn("Usage: usher-update [--auto]", run.stderr)
+        self.assertEqual(self.version(), ["USHER_VERSION=1.0.0"])
+        self.assertFalse(self.calls("docker") or self.calls("git"))
+
+    def test_a_version_usher_reports_that_is_not_a_plain_number_is_not_used(self):
+        (self.dir / "running").write_text("1..2\n")
+        run = self.run_update("--auto")
+        self.assertEqual(run.returncode, 1)
+        self.assertIn("doesn't answer", run.stderr)
+        self.assertFalse(self.calls("docker"))
+
+    def test_an_env_file_that_cannot_be_read_is_never_replaced_by_one_holding_only_the_version(self):
+        """grep exits 1 when no line is left, which is fine, and 2 when it can't read the file, which must stop."""
+        (self.bin / "grep").write_text("#!/bin/sh\nexit 2\n")
+        (self.bin / "grep").chmod(0o755)
+        run = self.run_update("--auto")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertEqual(self.env_file.read_text(), "TR_PASS=made-up\nUSHER_VERSION=1.0.0\n")
+        self.assertFalse([c for c in self.calls("docker") if " pull" in c or " up " in c])
+        self.assertEqual(self.env_file.read_text(), "TR_PASS=made-up\nUSHER_VERSION=1.0.0\n")
+
+    def test_an_env_file_with_only_the_version_line_is_updated(self):
+        self.env_file.write_text("USHER_VERSION=1.0.0\n")
+        self.assertEqual(self.run_update("--auto").returncode, 0)
+        self.assertEqual(self.env_file.read_text(), "USHER_VERSION=1.1.0\n")
+
     def test_a_repository_address_that_is_not_https_is_refused(self):
         (self.dir / "site.env").write_text("USHER_REPO=git@example.invalid:usher.git\n")
         run = self.run_update("--auto")
@@ -198,6 +228,15 @@ class UsherUpdateTests(unittest.TestCase):
         later = self.run_update("--auto")
         self.assertEqual(later.returncode, 0, later.stderr)
         self.assertEqual(self.version(), ["USHER_VERSION=1.1.0"])
+
+    def test_a_failed_pull_puts_env_back_exactly_as_it_was_whatever_is_running(self):
+        for before in ("TR_PASS=made-up\nUSHER_VERSION=1.0.0\n", "TR_PASS=made-up\n"):
+            with self.subTest(before=before):
+                self.env_file.write_text(before)
+                run = self.run_update(FAKE_PULL_FAILS="1", FAKE_HEALTHZ_DOWN="1")  # by hand, with Usher not answering
+                self.assertEqual(run.returncode, 1)
+                self.assertIn("nothing was changed", run.stderr)
+                self.assertEqual(self.env_file.read_text(), before)
 
     def test_an_old_compose_holds_the_update_instead_of_rolling_back(self):
         """Without --wait-timeout the update and the rollback would both fail while the old Usher runs fine."""

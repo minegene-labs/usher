@@ -22,7 +22,11 @@ esac
 [ -f "$DIR/compose.yaml" ] || { echo "No Usher install in $DIR (USHER_HOME in $CONF)." >&2; exit 1; }
 STATE=${USHER_STATE:-/var/lib/usher-deploy}
 export GIT_TERMINAL_PROMPT=0   # a request that asks for a login fails instead of waiting
-AUTO=0; [ "${1:-}" = "--auto" ] && AUTO=1
+case ${1:-} in
+  "") AUTO=0 ;;
+  --auto) AUTO=1 ;;
+  *) echo "Usage: usher-update [--auto]" >&2; exit 2 ;;   # an old timer unit's --if-changed must not start an update by hand
+esac
 install -d -m 700 "$STATE"
 exec 9>"$STATE/lock"; flock -n 9 || { echo "Another usher-update is running."; exit 0; }
 # Under systemd, stdout and stderr already go to the journal as usher-update, so log each line once
@@ -44,11 +48,12 @@ report() {   # tell Usher how this update ended (built or rolled_back), so Setti
 checked() {   # checked HELD FAILED (true or false): the newest release, so Settings can show whether updates keep arriving
   post "{\"result\": \"checked\", \"newest\": \"$NEWEST\", \"held\": $1, \"failed\": $2}"
 }
-setver() {   # USHER_VERSION in .env: the one place the version is written, and the one the image tag reads
+setver() {   # USHER_VERSION in .env: the one place the version is written, and the one the image tag reads; empty removes it
   [ -f "$DIR/.env" ] || { bad "No $DIR/.env: run setup.sh again."; exit 1; }
   ( umask 077
-    grep -v '^USHER_VERSION=' "$DIR/.env" > "$DIR/.env.new" || true
-    printf 'USHER_VERSION=%s\n' "$1" >> "$DIR/.env.new"
+    # grep's exit 1 only means no line is left; any other failure must stop before .env is replaced
+    grep -v '^USHER_VERSION=' "$DIR/.env" > "$DIR/.env.new" || [ $? -eq 1 ]
+    [ -z "$1" ] || printf 'USHER_VERSION=%s\n' "$1" >> "$DIR/.env.new"
     mv "$DIR/.env.new" "$DIR/.env" )
 }
 # The image's health check asks /healthz. Compose recreates the container when the image changes, so a
@@ -88,7 +93,7 @@ fi
 touch "$STATE/fetched"
 
 # What is running: the version Usher itself reports, as Settings shows it.
-RUNNING=$({ curl -fsS --max-time 5 http://127.0.0.1:8484/healthz 2>/dev/null || true; } | sed -n 's/.*"version": *"\([0-9.]*\)".*/\1/p')
+RUNNING=$({ curl -fsS --max-time 5 http://127.0.0.1:8484/healthz 2>/dev/null || true; } | sed -n 's/.*"version": *"\([0-9]\{1,6\}\.[0-9]\{1,6\}\.[0-9]\{1,6\}\)".*/\1/p')
 if [ -z "$RUNNING" ] && [ $AUTO = 1 ]; then
   bad "Usher updates: Usher doesn't answer on 127.0.0.1:8484, so nothing was updated. Look at: sudo docker logs --tail 50 usher"
   exit 1
@@ -118,10 +123,11 @@ fi
 
 say "Usher: updating ${RUNNING:-the version in .env} to $NEWEST"
 cd "$DIR"
+PINNED=$(sed -n 's/^USHER_VERSION=//p' "$DIR/.env" 2>/dev/null | tail -n 1 || true)   # what .env said, to put back as it was
 setver "$NEWEST"
 # The image exists a little after its tag: until it does, nothing has changed on this machine.
 if ! docker compose pull -q; then
-  [ -z "$RUNNING" ] || setver "$RUNNING"
+  setver "$PINNED"
   bad "Usher $NEWEST can't be downloaded yet (its image may still be being published); nothing was changed."
   checked false false
   [ $AUTO = 1 ] && exit 0

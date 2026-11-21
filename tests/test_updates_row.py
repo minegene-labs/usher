@@ -89,7 +89,7 @@ class UpdatesRow(unittest.TestCase):
         self.assertEqual(text["just_now"]["detail"], "Checked just now")
         self.assertEqual(text["one_minute"]["detail"], "Checked 1 minute ago")
         self.assertEqual(text["waiting"]["label"], "Update waiting")
-        self.assertIn("installs by itself within a day", text["waiting"]["detail"])
+        self.assertIn("is out and isn't installed yet", text["waiting"]["detail"])
         self.assertIn("1.1.0", text["waiting"]["detail"])
         self.assertEqual(text["held"]["label"], "Held")
         self.assertIn("needs a step on the server first", text["held"]["detail"])
@@ -131,7 +131,7 @@ class UpdatesRow(unittest.TestCase):
     def test_the_row_reads_the_state_with_a_hidden_dot(self):
         self.need_node()
         row = self.out["rows"]["waiting"]
-        self.assertEqual(row["words"], "UpdatesUpdate waiting · Version 1.1.0 installs by itself within a day")
+        self.assertEqual(row["words"], "UpdatesUpdate waiting · Version 1.1.0 is out and isn't installed yet")
         self.assertEqual((row["dot"], row["hidden"]), ("dot off", "true"))
 
     def test_while_loading_and_when_the_server_cant_be_reached(self):

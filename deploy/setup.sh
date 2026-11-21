@@ -62,7 +62,7 @@ VER=$(git ls-remote --tags --refs "$USHER_REPO" 'v*' \
 [ -n "$VER" ] || { echo "FAIL: $USHER_REPO has no release yet."; exit 1; }
 if [ -d "$DIR/src/.git" ]; then
   git -C "$DIR/src" remote set-url origin "$USHER_REPO"
-  git -C "$DIR/src" fetch --depth 1 origin "refs/tags/v$VER:refs/tags/v$VER" && git -C "$DIR/src" reset --hard "v$VER"
+  git -C "$DIR/src" fetch --depth 1 origin "+refs/tags/v$VER:refs/tags/v$VER" && git -C "$DIR/src" reset --hard "v$VER"
 else
   git clone --depth 1 --branch "v$VER" "$USHER_REPO" "$DIR/src"
 fi
@@ -197,11 +197,19 @@ cat > /usr/local/bin/usher-user <<'EOF'
 exec docker exec -it usher python -m usher.cli "$@"
 EOF
 install -m 755 "$DIR/src/deploy/usher-update" /usr/local/bin/usher-update
+chmod 755 /usr/local/bin/usher-user /usr/local/bin/usher-update
+# Automatic updates are optional and off unless turned on. The timer an earlier setup.sh turned on itself followed
+# every merge every 15 minutes, which is not what is turned on here, so it is turned off; one already of the new
+# kind (once a day, releases only) stays as the person left it.
+if [ -f /etc/systemd/system/usher-autodeploy.timer ] && grep -q '^OnUnitActiveSec=' /etc/systemd/system/usher-autodeploy.timer; then
+  systemctl disable --now usher-autodeploy.timer 2>/dev/null || true
+  OLD_TIMER=1
+fi
 install -m 644 "$DIR/src/deploy/usher-autodeploy.service" "$DIR/src/deploy/usher-autodeploy.timer" /etc/systemd/system/
 systemctl daemon-reload
-chmod 755 /usr/local/bin/usher-user /usr/local/bin/usher-update
-# Automatic updates are optional and stay as they are: off on a new install, and still on where they were turned on.
-if systemctl is-enabled --quiet usher-autodeploy.timer 2>/dev/null; then
+if [ -n "${OLD_TIMER:-}" ]; then
+  echo "The old timer, which updated Usher every 15 minutes, is off. Automatic updates are now optional and run once a day, to a new release only. To turn them on: sudo systemctl enable --now usher-autodeploy.timer"
+elif systemctl is-enabled --quiet usher-autodeploy.timer 2>/dev/null; then
   echo "Automatic updates are on: once a day, to a new release only. To turn them off: sudo systemctl disable --now usher-autodeploy.timer"
 else
   echo "Automatic updates are off. To update by hand: sudo usher-update. To turn them on: sudo systemctl enable --now usher-autodeploy.timer"

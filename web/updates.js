@@ -16,7 +16,7 @@ export function updatesText(view, nowMs = Date.now()) {
   }
   switch (view.state) {
     case "up_to_date": return { label: "Up to date", detail: `Checked ${minutesAgo(view.check.at, nowMs)}`, dot: "" };
-    case "waiting": return { label: "Update waiting", detail: `Version ${newest} installs by itself within a day`, dot: " off" };
+    case "waiting": return { label: "Update waiting", detail: `Version ${newest} is out and isn't installed yet`, dot: " off" };
     case "held": return { label: "Held", detail: `Version ${newest} needs a step on the server first, so it won't install by itself`, dot: " warn" };
     case "rolled_back": return { label: "Last update rolled back", detail: `Version ${newest} didn't work, so the previous version is still running`, dot: " warn" };
     default: return { label: "Can't tell", detail: "The server hasn't reported in over two days, so it may have stopped checking", dot: " off" };
