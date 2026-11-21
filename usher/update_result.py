@@ -117,7 +117,7 @@ class UpdateRoutes:
     def update_get(self, path):
         if path == "/api/changelog":
             return self.send(200, {"versions": changelog()})
-        return self.send(200, self.app.updates.view())
+        return self.send(200, {**self.app.updates.view(), "release": self.app.releases.view()})
 
     def update_report(self, data):
         if not local_only(self.client_address[0], self.headers.get("X-Forwarded-For")):

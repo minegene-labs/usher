@@ -37,3 +37,8 @@ dialog.sheet.big { max-width: 100%; }
 .about-credit { padding: 6px 4px 0; }
 .about-app .footnote, .about-credit .footnote { padding-left: 0; }
 .about-tmdb { display: block; height: 12px; width: auto; }
+
+/* Settings → About → Updates when a newer release is out: the notes link and the command to copy. */
+.update-how { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding-top: 6px; }
+.update-how a { color: var(--accent-text); }
+.update-command { display: block; max-width: 100%; overflow-wrap: anywhere; font: 13px/1.4 ui-monospace, monospace; user-select: all; }

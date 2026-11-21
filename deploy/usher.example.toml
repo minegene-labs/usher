@@ -93,3 +93,6 @@ max_attempts = 3                            # per episode, season or movie; then
 retry_after_days = 3
 folders = []                                # Transmission's download folders as Usher sees them (e.g. mounted
                                             # read-only), checked for leftovers; empty = ask Transmission only
+
+[updates]
+check_releases = "on"                       # "on" asks GitHub once a day for the newest release, for Settings -> About -> Updates; "off" makes no request

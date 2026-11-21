@@ -4,6 +4,9 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Added
+- Settings → About → Updates now tells you when a newer release is out, with a link to its notes and the command to update, ready to copy. Usher asks GitHub for the newest release once a day and installs nothing itself, since updating a container is up to the machine it runs on. Admins are told once about each new release. To turn the check off, set `check_releases = "off"` under `[updates]` in `usher.toml`; Usher then makes no request to GitHub. If GitHub can't be reached, the row says it can't check right now.
+
 ### Changed
 - The published container image now listens on all addresses inside the container by default, so it answers on the published port without `server.bind` being set. The provided `compose.yaml` still publishes that port on the host's `127.0.0.1` only, so other machines can't reach it. Running from source, and the install folder, still listen on `127.0.0.1`; the install folder's update is held for a manual `sudo usher-update`. If your `usher.toml` for the published image sets `server.bind = "0.0.0.0:8484"`, you can remove that line; a `server.bind` in `usher.toml` still wins.
 

@@ -131,3 +131,9 @@ Secrets never go in `usher.toml`. A list is written `["a", "b"]`; a whole number
 | `downloads.max_attempts` | `3` | Replacements per episode, season or movie |
 | `downloads.retry_after_days` | `3` | After max_attempts, wait this many days before trying again |
 | `downloads.folders` | `[]` | Transmission's download folders (unfinished and finished) as Usher sees them, checked for leftovers after a copy is removed; empty = ask Transmission only |
+
+### `[updates]`
+
+| Key | Default | Means |
+| --- | --- | --- |
+| `updates.check_releases` | `"on"` | Ask GitHub once a day for the newest release, for Settings → About → Updates: `"on"` or `"off"` (off = no request is made) |

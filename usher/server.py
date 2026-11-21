@@ -33,6 +33,7 @@ from .push import endpoint_ok
 from .clients import ApiError, Arr, Jellyfin, Transmission, jellyfin_device_id, cut_off_note
 from .state import State
 from .store import Store
+from .release_check import ReleaseCheck
 from .update_result import UpdateResult, UpdateRoutes
 from .wiring import Wiring
 
@@ -74,6 +75,8 @@ class App:
         self.notifier = Notifier(self.store, settings, config.get("server.push_contact") or settings.public_origin)
         self.state.notifier = self.notifier
         self.updates = UpdateResult(settings.data_dir)
+        self.releases = ReleaseCheck(settings.data_dir)
+        self.notifier.releases = self.releases
         self.state.replacer = Replacer(self.sonarr, self.radarr, self.tr, settings.data_dir)
         self.diag = Diagnostics(self.sonarr, self.radarr, self.prowlarr, self.tr, self.jf)
         self.state.titles.clears(self.diag._cache)
@@ -479,6 +482,7 @@ def main():
     app.state.start()
     app.wiring.start()
     app.discover.start()
+    app.releases.start()
     httpd = Server((settings.bind_host, settings.bind_port), Handler)
     signal.signal(signal.SIGTERM, lambda *_: (app.state.stop(), app.wiring.stop(), sys.exit(0)))
     log.info("Usher %s listening on %s:%d", __version__, settings.bind_host, settings.bind_port)

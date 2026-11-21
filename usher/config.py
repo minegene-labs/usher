@@ -175,6 +175,13 @@ KEYS = {
             check=_at_least(0),
             help="Free space to keep, in GB, on top of Sonarr's and Radarr's own minimum, after a replacement",
         ),
+        Key(
+            "updates.check_releases",
+            str,
+            "on",
+            check=_one_of("on", "off"),
+            help="Ask GitHub once a day for the newest release, for Settings → About → Updates: on or off (off = no request is made)",
+        ),
         Key("downloads.max_parallel", int, 2, check=_at_least(0), help="Replacements running at once, at most"),
         Key("downloads.max_attempts", int, 3, check=_at_least(1), help="Replacements per episode, season or movie"),
         Key("downloads.retry_after_days", int, 3, check=_at_least(1), help="After max_attempts, wait this many days before trying again"),

@@ -6,6 +6,14 @@ import { fill } from "./util.js";
 // How the server's state reads. Each line says the state in words, since the dot's colour alone must not carry it.
 export function updatesText(view, nowMs = Date.now()) {
   const newest = view.check?.newest;
+  const release = view.release;
+  if (view.state === "unknown" && release) {
+    // No update script reports in (the published image): the answer comes from the daily check for a newer release.
+    if (!release.enabled) return { label: "Not checking", detail: "Checking for new versions is turned off", dot: " off" };
+    if (release.failed) return { label: "Can't check right now", detail: "Usher couldn't look for a new version just now", dot: " off" };
+    if (release.available) return { label: "Update available", detail: `Version ${release.newest} is out`, dot: " warn", release };
+    if (release.newest) return { label: "Up to date", detail: `Checked ${minutesAgo(release.at, nowMs)}`, dot: "" };
+  }
   switch (view.state) {
     case "up_to_date": return { label: "Up to date", detail: `Checked ${minutesAgo(view.check.at, nowMs)}`, dot: "" };
     case "waiting": return { label: "Update waiting", detail: `Version ${newest} installs by itself within 15 minutes`, dot: " off" };
@@ -21,6 +29,17 @@ function minutesAgo(seconds, nowMs) {
   return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
 }
 
+// The notes link and the command that updates, which the person copies and runs on the host: Usher installs nothing.
+function updateHow(release) {
+  const copy = h("button", { type: "button", class: "link-btn", onclick: async () => {
+    try { await navigator.clipboard.writeText(release.command); copy.textContent = "Copied"; }
+    catch { copy.textContent = "Select the command to copy it"; }
+  } }, "Copy");
+  return h("div", { class: "update-how" },
+    h("a", { href: release.notes, target: "_blank", rel: "noopener" }, `What's new in ${release.newest}`),
+    h("code", { class: "update-command" }, release.command), copy);
+}
+
 export const Updates = (Base) => class extends Base {
   // The last answer is kept for the next time Settings draws, so the row doesn't flash "Checking…" on every redraw.
   updatesRow() {
@@ -34,7 +53,8 @@ export const Updates = (Base) => class extends Base {
     const text = view ? updatesText(view) : null;
     fill(row, h("span", { class: `dot${text ? text.dot : " off"}`, "aria-hidden": "true" }),
       h("div", { class: "text" }, h("div", { class: "title" }, "Updates"),
-        h("div", { class: "sub wrap" }, error ?? (text ? `${text.label} · ${text.detail}` : "Checking…"))),
+        h("div", { class: "sub wrap" }, error ?? (text ? `${text.label} · ${text.detail}` : "Checking…")),
+        text?.release ? updateHow(text.release) : null),
       h("span", {}));
   }
 

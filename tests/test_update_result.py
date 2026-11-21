@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 from usher import __version__
+from usher.release_check import ReleaseCheck
 from usher.store import Store
 from usher.update_result import UpdateResult, UpdateRoutes
 
@@ -19,7 +20,8 @@ class Request(UpdateRoutes):
     """Just enough of the request handler to run the routes: it records the answer instead of writing it."""
 
     def __init__(self, updates, ip="127.0.0.1", forwarded=None):
-        self.app = mock.Mock(updates=updates)
+        releases = ReleaseCheck(updates.path.parent, lambda: "1.0.0") if updates else None
+        self.app = mock.Mock(updates=updates, releases=releases)
         self.client_address = (ip, 50000)
         self.headers = {"X-Forwarded-For": forwarded} if forwarded else {}
         self.answer = None
@@ -89,7 +91,7 @@ class UpdateResultTests(unittest.TestCase):
         req = Request(self.updates)
         req.update_get("/api/updates")
         self.assertEqual(req.answer[1]["last"]["result"], "rolled_back")
-        self.assertEqual(set(req.answer[1]), {"last", "check", "state"})
+        self.assertEqual(set(req.answer[1]), {"last", "check", "state", "release"})
         self.assertEqual(set(req.answer[1]["last"]), {"result", "version", "commit", "at"})
         self.assertNotIn("auth", json.dumps(req.answer[1]))
 

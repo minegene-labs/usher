@@ -75,7 +75,7 @@ Web Push to each device that turns them on (Settings → Device). On some device
 
 The app icon badge shows how many things are ready to watch. Payloads are encrypted per device (RFC 8291) and signed with the server's own key (RFC 8292, stored in `data/vapid.pem`); only the push services of the major browser makers are accepted as destinations. On first start, Usher marks the existing library as already seen so nobody gets a flood.
 
-Nothing is sent when an update finishes. Settings → Advanced, collapsed by default, shows the last update result, and Settings → About → Changelog lists what changed in every version that changed something you would notice, newest first (read from `CHANGELOG.md`). It never appears on the attention list or anywhere else.
+Nothing is sent when an update finishes. The one update notice is for admins: when the daily check for a newer release (`usher/release_check.py`) finds one, each admin is told once, under the same switch as "The server needs attention". Settings → Advanced, collapsed by default, shows the last update result, and Settings → About → Changelog lists what changed in every version that changed something you would notice, newest first (read from `CHANGELOG.md`). It never appears on the attention list or anywhere else.
 
 ## Watching a title
 

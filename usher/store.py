@@ -161,7 +161,7 @@ class Store:
         return self.run("DELETE FROM users WHERE username = ?", (username,)) == 1
 
     def users(self):
-        return self.q("SELECT id, username, display, created, home_seen FROM users ORDER BY username")
+        return self.q("SELECT id, username, display, created, home_seen, admin FROM users ORDER BY username")
 
     # sessions ------------------------------------------------------------
     def add_session(self, id_hash: str, uid: int, csrf: str, device: str, days: int):

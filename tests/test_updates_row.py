@@ -35,6 +35,11 @@ const views = {
   rolled_back: { state: "rolled_back", check: { newest: "1.1.0", at: at(2) } },
   unknown: { state: "unknown", check: { newest: "1.0.0", at: at(300) } },
   none: { state: "unknown", check: null },
+  newer: { state: "unknown", check: null, release: { enabled: true, failed: false, newest: "1.1.0", at: at(30), available: true, notes: "https://example.test/notes", command: "example update" } },
+  same: { state: "unknown", check: null, release: { enabled: true, failed: false, newest: "1.0.0", at: at(30), available: false, notes: "https://example.test/notes", command: "example update" } },
+  unreachable: { state: "unknown", check: null, release: { enabled: true, failed: true, command: "example update" } },
+  off: { state: "unknown", check: null, release: { enabled: false, failed: false, command: "example update" } },
+  script_wins: { state: "up_to_date", check: { newest: "1.0.0", at: at(4) }, release: { enabled: true, failed: false, newest: "1.1.0", at: at(30), available: true, notes: "n", command: "c" } },
 };
 const text = Object.fromEntries(Object.entries(views).map(([k, v]) => [k, updatesText(v, now * 1)]));
 const words = (n) => (n.text ?? "") + (n.kids || []).map(words).join("");
@@ -45,7 +50,8 @@ const draw = (view, error) => {
   app.fillUpdates(row, view, error);
   return { words: words(row), dot: row.kids[0].className, hidden: row.kids[0].attrs["aria-hidden"] };
 };
-const rows = { waiting: draw(views.waiting), loading: draw(null), failed: draw(null, "Can't reach home") };
+const link = (n) => (n.tag === "a" ? [n.attrs.href] : []).concat((n.kids || []).flatMap(link));
+const rows = { newer: draw(views.newer), newer_links: (() => { const r = new El("div"); new (class extends Updates(class {}) {})().fillUpdates(r, views.newer); return link(r); })(), waiting: draw(views.waiting), loading: draw(null), failed: draw(null, "Can't reach home") };
 console.log(JSON.stringify({ text, rows }));
 """
 
@@ -92,6 +98,19 @@ class UpdatesRow(unittest.TestCase):
         self.assertEqual(text["unknown"]["label"], "Can't tell")
         self.assertEqual(text["none"]["label"], "Can't tell")
         self.assertIn("over an hour", text["none"]["detail"])
+
+    def test_a_newer_release_is_offered_with_its_notes_and_the_command(self):
+        self.need_node()
+        text = self.out["text"]
+        self.assertEqual((text["newer"]["label"], text["newer"]["detail"]), ("Update available", "Version 1.1.0 is out"))
+        self.assertEqual(text["same"]["label"], "Up to date")
+        self.assertEqual(text["unreachable"]["label"], "Can't check right now")
+        self.assertEqual(text["off"]["label"], "Not checking")
+        self.assertEqual(text["script_wins"]["label"], "Up to date")  # an update script that reports in is believed first
+        row = self.out["rows"]["newer"]["words"]
+        self.assertIn("What's new in 1.1.0", row)
+        self.assertIn("example update", row)
+        self.assertEqual(self.out["rows"]["newer_links"], ["https://example.test/notes"])
 
     def test_wording_follows_the_interface_rules(self):
         self.need_node()
