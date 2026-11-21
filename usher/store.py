@@ -5,7 +5,6 @@ import threading
 import time
 from pathlib import Path
 
-from . import config
 from .files import make_private
 
 SCHEMA = """
@@ -59,8 +58,7 @@ CREATE TABLE IF NOT EXISTS notify_prefs (
     stuck       INTEGER NOT NULL DEFAULT 1,
     problem     INTEGER NOT NULL DEFAULT 1,
     space       INTEGER NOT NULL DEFAULT 1,
-    server      INTEGER NOT NULL DEFAULT 0,
-    tz_offset   INTEGER NOT NULL DEFAULT 0       -- minutes ahead of UTC; set from the device
+    server      INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS notified (
     key TEXT PRIMARY KEY,
@@ -104,6 +102,8 @@ class Store:
             self._db.executescript(SCHEMA)
             self._db.execute("DROP TABLE IF EXISTS held")  # held back notifications of the removed Quiet hours
             self._migrate()
+            if "tz_offset" in {r[1] for r in self._db.execute("PRAGMA table_info(notify_prefs)")}:
+                self._db.execute("ALTER TABLE notify_prefs DROP COLUMN tz_offset")  # the device's offset, no longer kept
 
     def _migrate(self):
         """Columns added after the first release. Each is added once, if missing."""
@@ -309,19 +309,15 @@ class Store:
             # Server alerts are on by default only for the first account (usually whoever runs the server).
             first = self.one("SELECT MIN(id) AS id FROM users")
             self.run(
-                "INSERT OR IGNORE INTO notify_prefs (user_id, server, tz_offset) VALUES (?, ?, ?)",
-                (
-                    uid,
-                    1 if first and first["id"] == uid else 0,
-                    config.get("server.utc_offset_minutes"),
-                ),
+                "INSERT OR IGNORE INTO notify_prefs (user_id, server) VALUES (?, ?)",
+                (uid, 1 if first and first["id"] == uid else 0),
             )
             row = self.one("SELECT * FROM notify_prefs WHERE user_id = ?", (uid,))
         return row
 
     def set_prefs(self, uid: int, values: dict):
         self.prefs(uid)
-        cols = [k for k in values if k in PREF_KINDS + ("tz_offset",)]
+        cols = [k for k in values if k in PREF_KINDS]
         if cols:
             self.run(f"UPDATE notify_prefs SET {', '.join(f'{c} = ?' for c in cols)} WHERE user_id = ?", tuple(values[c] for c in cols) + (uid,))
 

@@ -21,6 +21,8 @@ services:
     user: "1000:1001"
     environment:
       - USHER_CONFIG=/data/usher.toml
+      # optional: the time zone for the times Usher shows, an IANA name such as Etc/GMT-2 (UTC when unset)
+      - TZ
       # secrets, taken from a .env file next to this one (or the shell); one that isn't set stays unset
       - JELLYFIN_API_KEY
       - SONARR_API_KEY
