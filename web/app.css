@@ -209,7 +209,8 @@ button.row:active { background: var(--fill); }
 .thumb { width: 48px; aspect-ratio: 2 / 3; border-radius: 6px; object-fit: cover; background: var(--fill); }
 .row .text { min-width: 0; }
 .row .title { font-size: 1.0625rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .sub { color: var(--label-2); font-size: 0.9375rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* The second line wraps to at most three lines, so a long note (the recycle bin's days) is read in full; the title stays on one. */
+.row .sub { color: var(--label-2); font-size: 0.9375rem; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow-wrap: anywhere; }
 .row .meta { color: var(--label-2); font-size: 0.9375rem; text-align: right; }
 .row .chev { color: var(--label-3); width: 8px; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); }
@@ -371,7 +372,6 @@ select.sort { border: 0; background: var(--fill); border-radius: 10px; padding: 
 /* Seasons of a show in the library */
 .seasons { margin-top: 16px; }
 .seasons-head { margin: 0 0 6px 4px; text-transform: uppercase; letter-spacing: 0.02em; }
-.seasons .row .sub { white-space: normal; }
 .row-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex: none; }
 .btn.small { width: auto; padding: 6px 14px; font-size: 0.9375rem; border-radius: 999px; flex: none; }
 .seasons .meta svg { width: 18px; height: 18px; color: var(--green, currentColor); }
