@@ -7,6 +7,9 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ### Changed
 - The install instructions now start with the published container image and `compose.yaml` alone, with nothing built on the server. The install folder with its helper script is described as an optional extra.
 
+### Fixed
+- Setting up a server no longer wipes your other saved passwords and keys when the file holding them can't be read while a new one is saved. Setup now stops with a message and leaves them as they were.
+
 ## [1.4.11]
 
 ### Added
