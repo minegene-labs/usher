@@ -98,13 +98,14 @@ The Tests workflow already checks what a rule can decide (file length, identifyi
 
 ## Releases
 
-A merge makes no release: it moves `stable`, which the server deploys from, and its changelog lines wait under `## [Unreleased]`. A maintainer runs the Release workflow from the Actions page, on `main`, when the collected changes are worth a release, giving the new version (digits and dots; at least the app's current version and newer than the latest release). It then:
+A merge makes no release: it moves `stable`, which the server deploys from, and its changelog lines wait under `## [Unreleased]`. A maintainer runs the Release workflow from the Actions page, on `main`, when the collected changes are worth a release, giving the new version (three numbers, for example `1.5.0`; at least the app's current version and newer than the latest release). It then:
 
-- gives the lines under `## [Unreleased]` that version and leaves a fresh, empty `## [Unreleased]`, and sets the version in the three files above to it (`.github/scripts/prepare_release.py`), as one commit pushed straight to `main`: GitHub Actions is the one bypass actor of the `protect-main` ruleset, for this push only. It then starts Tests on `main`, so `stable` follows. It runs only when `main` is the commit `stable` already holds, so only tested code is released; if a merge is still being tested, run it again once that passes;
-- tags that commit, publishes the release with that version's section of `CHANGELOG.md` as its notes (`.github/scripts/release_notes.py`, with the parser the app's Changelog screen uses; a version with no section says it has no changes to notice) and opens an announcement for it in the Announcements discussion category;
+- gives the lines under `## [Unreleased]` that version and leaves a fresh, empty `## [Unreleased]`, and sets the version in the three files above to it (`.github/scripts/prepare_release.py`), as one commit pushed straight to `main`. That push needs GitHub Actions to be a bypass actor of the `protect-main` ruleset, a repository setting; it lets any workflow with write access to the contents push to `main`, so a change to a workflow gets the review described above. Release runs only when `main` is the commit `stable` already holds, so it starts from tested code; if a merge is still being tested, run it again once that passes;
+- starts Tests on `main` (a push made with the workflow's own token starts none) and waits until `stable` holds the release commit, which only happens once Tests pass on it;
+- then tags that commit, publishes the release with that version's section of `CHANGELOG.md` as its notes (`.github/scripts/release_notes.py`, with the parser the app's Changelog screen uses; a version with no section says it has no changes to notice) and opens an announcement for it in the Announcements discussion category;
 - publishes the version's container image.
 
-A job that fails can be re-run on its own from the Actions page; the commit is made only once.
+If a job fails, re-run that job from the Actions page rather than starting a new Release: the commit is already made. If Tests failed on the release commit, fix `main` with a pull request first; once `stable` is past the release commit, the re-run goes on from there.
 
 ## Filing issues
 

@@ -2,7 +2,7 @@
 
 Merged pull requests add their changelog lines under `## [Unreleased]`; nothing is released on a merge. The Release
 workflow, run by hand with a version, calls this script on the tested commit. It
-- checks the version: digits and dots only, at least the version the app already has and newer than every release
+- checks the version: three numbers separated by dots (1.5.0), at least the version the app already has and newer than every release
   (tags `v<version>`), so a release can never be overwritten or a version go backwards;
 - renames `## [Unreleased]` to `## [<version>]` and leaves a fresh, empty `## [Unreleased]` above it. With no lines
   under `[Unreleased]` the changelog stays as it is: a version with no section says it has no changes to notice;
@@ -25,7 +25,7 @@ sys.path.insert(0, str(ROOT))
 
 from usher.update_result import version_key  # noqa: E402  (the import needs the path above)
 
-VERSION = re.compile(r"\d+(?:\.\d+)*", re.ASCII)
+VERSION = re.compile(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}", re.ASCII)
 TAG = re.compile(r"v(\d+(?:\.\d+)*)", re.ASCII)
 UNRELEASED = "## [Unreleased]"
 # The line each file keeps its version on (the same lines .github/scripts/pr_gates.py treats as a version bump).
@@ -40,7 +40,7 @@ def check_version(version: str, current: str, tags: list[str]) -> None:
     """Raises ValueError, saying why, unless `version` may be released: a version number at least as new as the app's
     own (`current`) and newer than every release among `tags`."""
     if not VERSION.fullmatch(version):
-        raise ValueError(f"Not a version number: {version!r}. Use digits and dots, for example 1.5.0.")
+        raise ValueError(f"Not a version number: {version!r}. Use three numbers separated by dots, for example 1.5.0.")
     if version_key(version) < version_key(current):
         raise ValueError(f"{version} is older than the version the app already has ({current}).")
     released = [found[1] for tag in tags if (found := TAG.fullmatch(tag))]

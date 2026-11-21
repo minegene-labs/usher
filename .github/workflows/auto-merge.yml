@@ -147,7 +147,7 @@ jobs:
           merged_tree=$(gh api "repos/$GH_REPO/git/commits/$merged" --jq '.tree.sha')
           tested_tree=$(gh api "repos/$GH_REPO/git/commits/$SHA" --jq '.tree.sha')
           if [ "$merged_tree" = "$tested_tree" ] && [ "$TESTED_BY" != "dependabot[bot]" ]; then
-            echo "#$number's squash commit holds exactly what its Tests run checked; releasing $merged."
+            echo "#$number's squash commit holds exactly what its Tests run checked; promoting $merged."
             echo "promote_sha=$merged" >> "$GITHUB_OUTPUT"
           else
             echo "main moved since #$number's Tests run (or Dependabot's run skipped the privacy check); testing main."

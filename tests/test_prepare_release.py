@@ -87,12 +87,28 @@ class VersionTests(unittest.TestCase):
         script.check_version(version, current, list(tags))
 
     def test_a_newer_version_is_accepted(self):
-        for version in ("1.4.2", "1.4.3", "1.5.0", "2", "10.0.0"):
+        for version in ("1.4.2", "1.4.3", "1.5.0", "2.0.0", "10.0.0"):
             with self.subTest(version=version):
                 self.check(version)
 
     def test_only_digits_and_dots_are_accepted(self):
-        for bad in ("", "v1.5.0", "1.5.0; echo x", "$(id)", "1.5.0\n", "1..5", "1.5.", "Unreleased", "٢.0.0", "../1.5"):
+        for bad in (
+            "",
+            "v1.5.0",
+            "1.5.0; echo x",
+            "$(id)",
+            "1.5.0\n",
+            "1..5",
+            "1.5.",
+            "Unreleased",
+            "٢.0.0",
+            "../1.5",
+            "1.5",
+            "2",
+            "1.5.0.0",
+            "1.05.0",
+            "01.5.0",
+        ):
             with self.subTest(version=bad):
                 with self.assertRaises(ValueError):
                     self.check(bad)

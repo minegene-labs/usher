@@ -3,10 +3,12 @@ name: Release
 # release. Merged pull requests only add their lines there; nothing is released on a merge (Promote moves `stable`).
 # prepare: gives the collected lines their version (.github/scripts/prepare_release.py renames `[Unreleased]`, leaves
 # a fresh one and sets the version in the three files that carry it), commits that to main and pushes it. It pushes
-# directly, which the protect-main ruleset allows only for GitHub Actions as a bypass actor; the push is refused when
-# main moved on since the run began, and it runs only on main's commit that `stable` already holds (the tested one).
-# A push made with the workflow's own token starts no Tests run, so the last step starts one on main, as Auto-merge does;
-# once it passes, Promote moves `stable` to the release commit and the next Release can run.
+# directly, which the protect-main ruleset allows only because GitHub Actions is a bypass actor; the push is refused
+# when main moved on since the run began, and it runs only on main's commit that `stable` already holds (the tested one).
+# tested: a push made with the workflow's own token starts no Tests run, so this starts one on main, as Auto-merge does,
+# and waits until `stable` holds the release commit, which Promote moves it to only once Tests pass. Nothing is tagged,
+# published or built before that. If Tests fail, fix main with a pull request; once `stable` is past the release commit,
+# re-run this failed job (not a new Release: the commit is already made) and the rest follows.
 # publish: tags that commit and publishes the release, with the version's changelog section as its notes and an
 # announcement in the Announcements discussion category.
 # image: publishes the version's container image.
@@ -27,7 +29,6 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write    # push the release commit to main
-      actions: write     # start Tests on it
     concurrency:
       group: release
       cancel-in-progress: false
@@ -40,7 +41,8 @@ jobs:
       - name: Check that this runs on main
         env:
           REF: ${{ github.ref }}
-        run: '[ "$REF" = refs/heads/main ] || { echo "::error::Run Release on the main branch."; exit 1; }'
+        run: |
+          [ "$REF" = refs/heads/main ] || { echo "::error::Run Release on the main branch."; exit 1; }
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0    # every tag, to check the version is new
@@ -66,14 +68,37 @@ jobs:
           git push origin HEAD:refs/heads/main
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+  tested:
+    needs: [prepare]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read    # compare stable with the release commit
+      actions: write    # start Tests
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+    steps:
       - name: Start Tests on the release commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
         run: gh workflow run tests.yml --ref main
+      - name: Wait until stable holds the release commit
+        # Promote moves stable only to a commit whose Tests passed, and past the release commit once a later merge
+        # passes too, so "identical" or "ahead" both mean the release commit was tested.
+        run: |
+          for _ in $(seq 1 70); do
+            status=$(gh api "repos/$GH_REPO/compare/$SHA...stable" --jq .status 2>/dev/null || true)
+            case "$status" in
+              identical|ahead) echo "stable holds the release commit."; exit 0 ;;
+            esac
+            sleep 20
+          done
+          echo "::error::stable has not reached the release commit: Tests may have failed on it. Fix main with a pull request, then re-run this job."
+          exit 1
 
   publish:
-    needs: [prepare]
+    needs: [prepare, tested]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

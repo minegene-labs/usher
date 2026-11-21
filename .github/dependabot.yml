@@ -1,6 +1,6 @@
 version: 2
-# Monthly, and one pull request per ecosystem: each update goes through Tests, merge and a release,
-# which all cost Actions minutes.
+# Monthly, and one pull request per ecosystem: each update goes through Tests and a merge,
+# which cost Actions minutes.
 # Auto-merge squash-merges a patch or minor update once Tests pass. A pull request with a major version
 # update (in a group, any one of them) stays open with the "hold" label and a comment saying it is a major
 # update: a major version can change behaviour Tests don't cover, so a person reads its release notes and
