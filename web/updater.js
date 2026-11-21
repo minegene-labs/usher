@@ -1,6 +1,6 @@
 // Usher — updates: BUILD must match usher/__init__.py and sw.js (a test checks).
 // ---- updates: this file's version must match usher/__init__.py and sw.js (a test checks) ------
-export const BUILD = "1.4.8";
+export const BUILD = "1.4.9";
 export const updater = {
   // True when the server runs a different Usher from the one on screen, unless a reload to that
   // version already happened this session (so a mismatch can never loop).

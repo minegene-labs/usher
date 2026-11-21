@@ -26,6 +26,3 @@ rules:
       # Promote pushes the tested commit to the stable branch with the credentials the checkout keeps. It uploads
       # no artifacts and runs no pull request code, so the stored token goes nowhere.
       - promote.yml
-      # Release's prepare job pushes the release commit to main with the credentials the checkout keeps. It runs by
-      # hand, on main only, uploads no artifacts and runs no pull request code, so the stored token goes nowhere.
-      - release.yml

@@ -2,11 +2,16 @@ name: Release
 # Run by hand, with the new version, when the changes collected under `## [Unreleased]` in CHANGELOG.md are worth a
 # release. Merged pull requests only add their lines there; nothing is released on a merge (Promote moves `stable`).
 # prepare: gives the collected lines their version (.github/scripts/prepare_release.py renames `[Unreleased]`, leaves
-# a fresh one and sets the version in the three files that carry it), commits that to main and pushes it. It pushes
-# directly, which the protect-main ruleset allows only because GitHub Actions is a bypass actor; the push is refused
-# when main moved on since the run began, and it runs only on main's commit that `stable` already holds (the tested one).
-# tested: a push made with the workflow's own token starts no Tests run, so this starts one on main, as Auto-merge does,
-# and waits until `stable` holds the release commit, which Promote moves it to only once Tests pass. Nothing is tagged,
+# a fresh one and sets the version in the three files that carry it), commits that to main and pushes it. The protect-main
+# ruleset has no bypass for GitHub Actions itself, so the push is made as the release GitHub App, which is on the
+# ruleset's bypass list (CONTRIBUTING.md, Releases, says how it is set up). Its private key is the workflow's only
+# secret: it lives in the `release` environment, which only main may use, and is read by one step, after the scripts and
+# tests of the repository have run, to get a token for this repository and the Contents permission only, which is
+# revoked as soon as the push is done (it would otherwise last an hour).
+# The checkout keeps no credentials, and the job's own token only reads. The push is refused when main moved on since the
+# run began, and the job runs only on main's commit that `stable` already holds (the tested one).
+# tested: a push made with an app's token (unlike one made with the workflow's own) starts Tests on main by itself.
+# This waits until `stable` holds the release commit, which Promote moves it to only once Tests pass. Nothing is tagged,
 # published or built before that. If Tests fail, fix main with a pull request; once `stable` is past the release commit,
 # re-run this failed job (not a new Release: the commit is already made) and the rest follows.
 # publish: tags that commit and publishes the release, with the version's changelog section as its notes and an
@@ -27,8 +32,9 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    environment: release    # holds the app's key; limited to the main branch in the repository's settings
     permissions:
-      contents: write    # push the release commit to main
+      contents: read    # check out; the release commit is pushed with the app's token, not this one
     concurrency:
       group: release
       cancel-in-progress: false
@@ -46,6 +52,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0    # every tag, to check the version is new
+          persist-credentials: false
       - name: Check that main is the tested commit
         # stable only ever holds a commit whose Tests passed, so a main that stable hasn't reached yet is still being tested
         # (or its promotion failed): nothing is released from it.
@@ -58,16 +65,41 @@ jobs:
         run: python3 .github/scripts/prepare_release.py "$VERSION"
       - name: Check the version files and the release notes still read
         run: python3 -m unittest tests.test_versions tests.test_release_notes
+      - name: Get a short-lived token for the release app
+        # After everything the repository's own code does in this job, so none of it can read the key.
+        id: token
+        env:
+          APP_ID: ${{ vars.RELEASE_APP_ID }}
+          APP_KEY: ${{ secrets.RELEASE_APP_KEY }}
+          GH_REPO: ${{ github.repository }}
+        run: python3 .github/scripts/app_token.py
       - name: Commit and push to main
         id: push
+        env:
+          TOKEN: ${{ steps.token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md usher/__init__.py web/sw.js web/updater.js
           git commit -m "chore(release): version $VERSION"
-          git push origin HEAD:refs/heads/main
+          header=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          echo "::add-mask::$header"
+          # In git's environment, not on its command line, where any process on the runner could read it.
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $header"
+          git push origin HEAD:refs/heads/main || {
+            echo "::error::The push to main did not go through. Usual reasons: main moved on since this run began (run Release again), or the release app is not on the protect-main ruleset's bypass list (CONTRIBUTING.md, Releases). Git's message above says which."
+            exit 1
+          }
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Revoke the token
+        # It would stay valid for an hour; this ends it with the job, also when the push failed. A failure here is only
+        # a warning: the token expires by itself.
+        if: ${{ always() && steps.token.outputs.token != '' }}
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ steps.token.outputs.token }}
+        run: gh api --method DELETE /installation/token
 
   tested:
     needs: [prepare]
@@ -75,17 +107,15 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read    # compare stable with the release commit
-      actions: write    # start Tests
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       SHA: ${{ needs.prepare.outputs.sha }}
     steps:
-      - name: Start Tests on the release commit
-        run: gh workflow run tests.yml --ref main
       - name: Wait until stable holds the release commit
-        # Promote moves stable only to a commit whose Tests passed, and past the release commit once a later merge
-        # passes too, so "identical" or "ahead" both mean the release commit was tested.
+        # The release commit's push starts Tests (tests.yml runs on every push to main), and Promote moves stable only
+        # to a commit whose Tests passed, and past the release commit once a later merge passes too, so "identical" or
+        # "ahead" both mean the release commit was tested.
         run: |
           for _ in $(seq 1 70); do
             status=$(gh api "repos/$GH_REPO/compare/$SHA...stable" --jq .status 2>/dev/null || true)
@@ -94,7 +124,7 @@ jobs:
             esac
             sleep 20
           done
-          echo "::error::stable has not reached the release commit: Tests may have failed on it. Fix main with a pull request, then re-run this job."
+          echo "::error::stable has not reached the release commit: Tests may have failed on it, or not started. Look at the Tests run for it, fix main with a pull request if it failed, then re-run this job."
           exit 1
 
   publish:

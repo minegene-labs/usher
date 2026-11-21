@@ -100,10 +100,22 @@ The Tests workflow already checks what a rule can decide (file length, identifyi
 
 A merge makes no release: it moves `stable`, which the server deploys from, and its changelog lines wait under `## [Unreleased]`. A maintainer runs the Release workflow from the Actions page, on `main`, when the collected changes are worth a release, giving the new version (three numbers, for example `1.5.0`; at least the app's current version and newer than the latest release). It then:
 
-- gives the lines under `## [Unreleased]` that version and leaves a fresh, empty `## [Unreleased]`, and sets the version in the three files above to it (`.github/scripts/prepare_release.py`), as one commit pushed straight to `main`. That push needs GitHub Actions to be a bypass actor of the `protect-main` ruleset, a repository setting; it lets any workflow with write access to the contents push to `main`, so a change to a workflow gets the review described above. Release runs only when `main` is the commit `stable` already holds, so it starts from tested code; if a merge is still being tested, run it again once that passes;
-- starts Tests on `main` (a push made with the workflow's own token starts none) and waits until `stable` holds the release commit, which only happens once Tests pass on it;
+- gives the lines under `## [Unreleased]` that version and leaves a fresh, empty `## [Unreleased]`, and sets the version in the three files above to it (`.github/scripts/prepare_release.py`), as one commit pushed straight to `main` as the release GitHub App (see below), which is on the `protect-main` ruleset's bypass list. Release runs only when `main` is the commit `stable` already holds, so it starts from tested code; if a merge is still being tested, run it again once that passes;
+- waits until `stable` holds the release commit, which only happens once Tests pass on it: the app's push starts Tests on `main` by itself, as every push to `main` does;
 - then tags that commit, publishes the release with that version's section of `CHANGELOG.md` as its notes (`.github/scripts/release_notes.py`, with the parser the app's Changelog screen uses; a version with no section says it has no changes to notice) and opens an announcement for it in the Announcements discussion category;
 - publishes the version's container image.
+
+### The release app
+
+`protect-main` requires a pull request and passing checks and has no bypass for GitHub Actions itself (GitHub offers only roles, deploy keys and apps installed on the repository), so the release commit is pushed as a GitHub App that is on the ruleset's bypass list. A repository admin sets it up once:
+
+1. Create a GitHub App (Settings → Developer settings → GitHub Apps) with no webhook and one repository permission, Contents: read and write, and install it on this repository only. Without the Workflows permission it can't change a workflow file.
+2. Generate a private key for it. In the repository's Settings → Environments, create an environment named `release`, limit its deployment branches to `main`, and add the key's full text as the secret `RELEASE_APP_KEY` and the app's ID as the variable `RELEASE_APP_ID`.
+3. In Settings → Rules → Rulesets → `protect-main`, add the app to the bypass list with the mode "Always". Nothing else about the ruleset changes: everyone else still needs a pull request and passing checks.
+
+The key is the workflow's only secret. Only the Release workflow's first job reads it, from an environment that only `main` can use, in one step that runs after the repository's own scripts and tests and exchanges it (`.github/scripts/app_token.py`) for a token for this repository and the Contents permission only, which the job revokes as soon as the push is done (it would otherwise last an hour). The job's own token can only read.
+
+Other ways were weighed. A deploy key with write access never expires, can't be limited to the one thing the release needs and can change workflow files, so losing it would cost more than losing the app's key. Leaving the release commit off `main` (tagging the tested commit and building the notes from `[Unreleased]`) would leave the version in `main` and the changelog the app shows behind the release, with the collected lines never given their version.
 
 If a job fails, re-run that job from the Actions page rather than starting a new Release: the commit is already made. If Tests failed on the release commit, fix `main` with a pull request first; once `stable` is past the release commit, the re-run goes on from there.
 
