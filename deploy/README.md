@@ -65,7 +65,7 @@ If one is missing, Docker Compose refuses to start Usher and names it.
 
 ## Auto-deploy
 
-Pull requests merge into `main` once their tests pass, and the Release workflow then moves `stable` to the merge. `stable` only ever holds tested code, and the server deploys only `stable`.
+Pull requests merge into `main` once their tests pass, and the Promote workflow then moves `stable` to the merge. `stable` only ever holds tested code, and the server deploys only `stable`.
 
 `usher-autodeploy.timer` runs `usher-update --if-changed` every 15 minutes (5 minutes after boot, with up to a minute's random delay):
 
@@ -107,7 +107,7 @@ When an update finishes or is rolled back, `usher-update` reports it to Usher on
 
 ## Running the published image
 
-Everyone else can run Usher without building it. Each release publishes a container image for `linux/amd64` and `linux/arm64` at `ghcr.io/minegene-labs/usher`, tagged with the version and `latest`, with its build provenance attested. [`compose.yaml`](../compose.yaml) at the top of the repository runs it with nothing from the machine: the port on `127.0.0.1:8484` only, one named volume for Usher's data, the container's hardening described under Security model (non-root, read-only, no capabilities, memory and process limits), no remote parts and no Docker socket. It is separate from the install folder above, which builds from source and updates itself, and has its own steps for settings and accounts, because `setup.sh` and `usher-user` belong to that install.
+Everyone else can run Usher without building it. Each release, made by hand when enough changes have collected, publishes a container image for `linux/amd64` and `linux/arm64` at `ghcr.io/minegene-labs/usher`, tagged with the version and `latest`, with its build provenance attested. [`compose.yaml`](../compose.yaml) at the top of the repository runs it with nothing from the machine: the port on `127.0.0.1:8484` only, one named volume for Usher's data, the container's hardening described under Security model (non-root, read-only, no capabilities, memory and process limits), no remote parts and no Docker socket. It is separate from the install folder above, which builds from source and updates itself, and has its own steps for settings and accounts, because `setup.sh` and `usher-user` belong to that install.
 
 1. Download `compose.yaml` into an empty folder and read it: `docker compose config` prints what it will run. To stay on one version, set `USHER_VERSION` (for example `USHER_VERSION=1.2.0`) in a `.env` file beside it.
 2. Put the secrets in that `.env` file, one per line: `JELLYFIN_API_KEY`, `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY`, `TR_PASS` and, for Discover, `TMDB_TOKEN`. Keep it readable by you alone.

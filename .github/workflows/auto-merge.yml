@@ -15,12 +15,12 @@ name: Auto-merge
 # fixes, so the merged pull requests can be filtered by type.
 # A merge made with the workflow's own token doesn't start other workflows or close the issues the pull
 # request fixes, so this closes the issues named by "Fixes #n" (or closes/resolves) in the pull request's
-# description itself, and releases the merge:
+# description itself, and promotes the merge (moves `stable` to it):
 # - If the squash commit's tree is the tree of the commit Tests passed on (main was already in the
-#   branch), it holds exactly what the pull request's Tests run checked, so it calls Release with it
+#   branch), it holds exactly what the pull request's Tests run checked, so it calls Promote with it
 #   straight away: no second Tests run. Dependabot's runs skip the privacy check, so theirs are always
 #   tested again.
-# - Otherwise it starts Tests on main, which calls Release once it passes, as it does after a push.
+# - Otherwise it starts Tests on main, which calls Promote once it passes, as it does after a push.
 on:
   workflow_run:
     workflows: [Tests]
@@ -52,9 +52,9 @@ jobs:
       BRANCH: ${{ github.event.workflow_run.head_branch }}
       TESTED_BY: ${{ github.event.workflow_run.actor.login }}
     outputs:
-      release_sha: ${{ steps.merge.outputs.release_sha }}
+      promote_sha: ${{ steps.merge.outputs.promote_sha }}
     steps:
-      - name: Label, squash, delete the branch, close fixed issues, and release or test main
+      - name: Label, squash, delete the branch, close fixed issues, and promote or test main
         id: merge
         env:
           PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
@@ -148,7 +148,7 @@ jobs:
           tested_tree=$(gh api "repos/$GH_REPO/git/commits/$SHA" --jq '.tree.sha')
           if [ "$merged_tree" = "$tested_tree" ] && [ "$TESTED_BY" != "dependabot[bot]" ]; then
             echo "#$number's squash commit holds exactly what its Tests run checked; releasing $merged."
-            echo "release_sha=$merged" >> "$GITHUB_OUTPUT"
+            echo "promote_sha=$merged" >> "$GITHUB_OUTPUT"
           else
             echo "main moved since #$number's Tests run (or Dependabot's run skipped the privacy check); testing main."
             gh workflow run tests.yml --ref main
@@ -164,20 +164,17 @@ jobs:
             fi
           done
 
-  release:
+  promote:
     # Only when the squash commit holds exactly what the pull request's Tests run checked (see the merge step).
     needs: [merge]
-    if: needs.merge.outputs.release_sha != ''
-    uses: ./.github/workflows/release.yml
+    if: needs.merge.outputs.promote_sha != ''
+    uses: ./.github/workflows/promote.yml
     with:
-      sha: ${{ needs.merge.outputs.release_sha }}
-    permissions:    # the ceiling for Release, whose jobs each take only their part (see release.yml)
+      sha: ${{ needs.merge.outputs.promote_sha }}
+    permissions:    # the ceiling for Promote, whose jobs each take only their part (see promote.yml)
       contents: write
       pull-requests: write
       issues: write
-      packages: write
-      id-token: write
-      attestations: write
 
   delete-branch:
     # Pull requests merged by hand: delete their branch too.

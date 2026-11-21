@@ -51,7 +51,7 @@ exec "$REAL_PYTHON" "$@"
 
 
 def _script():
-    step = WORKFLOW.split("        run: |\n", 1)[1].split("\n  release:", 1)[0]
+    step = WORKFLOW.split("        run: |\n", 1)[1].split("\n  promote:", 1)[0]
     return "\n".join(line[10:] for line in step.splitlines()) + "\n"
 
 

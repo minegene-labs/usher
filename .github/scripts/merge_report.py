@@ -1,19 +1,19 @@
-"""The report Release posts after each merge, once `stable` has moved, so nobody has to check a merge by hand.
+"""The report Promote posts after each merge, once `stable` has moved, so nobody has to check a merge by hand.
 
-Reads the merged pull request, its squash commit, the release, `stable` and the open issues from GitHub's REST API
-and prints a report: a verdict line (`OK` or `PROBLEM`), then one line per check. The release workflow posts it as a
-comment on the pull request and in the job summary; a PROBLEM also opens or updates one issue and turns the run red.
-tests/test_merge_report.py has the cases.
+Reads the merged pull request, its squash commit, `stable` and the open issues from GitHub's REST API and prints a
+report: a verdict line (`OK` or `PROBLEM`), then one line per check. The promote workflow posts it as a comment on the
+pull request and in the job summary; a PROBLEM also opens or updates one issue and turns the run red.
+tests/test_merge_report.py has the cases. A merge makes no release (the Release workflow is run by hand), so no check
+looks at tags or images.
 
-- `promote` finished: when it failed, `stable` may not have moved and the version may have no release.
-- `image` finished: when it failed, the version's container image may not be published or attested.
-- The version in usher/__init__.py is released, tagged at the merge commit. A merge that changes only documentation,
-  `.claude/` or `.github/` files ships nothing, so it needs no new version: an earlier release is fine.
-- `stable` is at the merge commit, or past it when a later merge was released since (information).
-- A merge that is superseded, with `stable` past it and its version released at a later commit (a later merge was
-  released while its Tests run waited, so promote's fast-forward push was refused), is reported as information: its
-  promote job and its version aren't counted against it, so no problem issue is opened. Without both signs they count,
-  and every other check still counts.
+- `promote` finished: when it failed, `stable` may not have moved.
+- The version in usher/__init__.py differs from the one before the merge (it is the build number that makes a device
+  drop its saved copy of the app). A merge that changes only documentation, `.claude/` or `.github/` files needs no
+  new version, and Dependabot's updates keep it.
+- `stable` is at the merge commit, or past it when a later merge was promoted since (information).
+- A merge that is superseded, with `stable` past it (a later merge was promoted while its Tests run waited, so
+  promote's fast-forward push was refused), is reported as information: its promote job isn't counted against it, so
+  no problem issue is opened. Every other check still counts.
 - Every issue the description fixes (`Fixes #<n>`) is closed.
 - Which changed files need a person's eye (workflows, Dockerfile, deploy/, .claude/, web/sw.js, web/data.js): shown,
   never a problem by itself. A change to web/sw.js that only moves its version line isn't shown.
@@ -23,8 +23,8 @@ tests/test_merge_report.py has the cases.
 
 Dependabot's updates keep the version and fix no issue, so those lines say so instead.
 
-Usage: python3 .github/scripts/merge_report.py SHA (GH_TOKEN and GITHUB_REPOSITORY in the environment; PROMOTE and IMAGE,
-the results of Release's promote and image jobs, default to success)
+Usage: python3 .github/scripts/merge_report.py SHA (GH_TOKEN and GITHUB_REPOSITORY in the environment; PROMOTE, the
+result of Promote's promote job, defaults to success)
 """
 
 import base64
@@ -46,10 +46,10 @@ TRIAGE_TIME = datetime.timedelta(hours=24)
 FLAGGED_DIRS = (".github/workflows/", "deploy/", ".claude/")
 FLAGGED_FILES = ("web/sw.js", "web/data.js")
 DOCKERFILE = re.compile(r"(^|/)Dockerfile[^/]*$")
-# What makes a release: the app, its container (the Dockerfile also copies requirements.txt and CHANGELOG.md, which
-# the app shows) and the tests that cover them.
-RELEASED_DIRS = ("usher/", "web/", "deploy/", "tests/")
-RELEASED_FILES = ("requirements.txt", "CHANGELOG.md")
+# What a new version is for: the app, its container (the Dockerfile also copies requirements.txt and CHANGELOG.md, which
+# the app shows) and the tests that cover them. A phone keeps its saved copy of the app until the version changes.
+VERSIONED_DIRS = ("usher/", "web/", "deploy/", "tests/")
+VERSIONED_FILES = ("requirements.txt", "CHANGELOG.md")
 SW_VERSION_LINE = re.compile(r'const VERSION = "usher-[0-9.]+";')
 VERSION = re.compile(r'(?m)^__version__ = "([0-9]+(?:\.[0-9]+)*)"$')
 # The same words Auto-merge closes issues by.
@@ -70,10 +70,9 @@ def issue_list(numbers):
 
 
 def superseded(merge):
-    """Whether a later merge was released while this one's Tests run waited: `stable` is past the merge commit and the
-    merge's version is released at a commit after it. `stable` alone isn't enough: a promote that moved `stable` and
-    then failed before releasing the version looks the same until a later merge goes past it."""
-    return merge["stable"] == "ahead" and merge["released_later"]
+    """Whether a later merge was promoted while this one's Tests run waited: `stable` is past the merge commit, which
+    refuses promote's fast-forward push."""
+    return merge["stable"] == "ahead"
 
 
 def check_promote(merge):
@@ -81,40 +80,29 @@ def check_promote(merge):
     if result == "success":
         return "ok", "The promote job finished."
     if superseded(merge):
-        return "info", f"The promote job didn't finish ({shown(result)}), but `stable` is already past the merge commit: a later merge was released."
-    return "problem", f"The promote job didn't finish ({shown(result)}): `stable` may not have moved and the version may have no release."
+        return "info", f"The promote job didn't finish ({shown(result)}), but `stable` is already past the merge commit: a later merge was promoted."
+    return "problem", f"The promote job didn't finish ({shown(result)}): `stable` may not have moved."
 
 
-def check_image(merge):
-    result = merge["image"]
-    if result == "success":
-        return "ok", "The image job finished: this version's container image is published."
-    if result == "skipped" and merge["promote"] != "success":
-        return "info", "The image job didn't run, because the promote job didn't finish."
-    return "problem", f"The image job didn't finish ({shown(result)}): the version's container image may not be published or attested."
-
-
-def ships_nothing(files):
-    """Whether no changed file, at its new or its old path (a rename), is part of the app, its container or its tests."""
+def changes_the_app(files):
+    """Whether any changed file, at its new or its old path (a rename), is part of the app, its container or its tests."""
     paths = [p for c in files for p in (c["filename"], c.get("previous_filename") or "")]
-    return not any(p.startswith(RELEASED_DIRS) or p in RELEASED_FILES or DOCKERFILE.search(p) for p in paths)
+    return any(p.startswith(VERSIONED_DIRS) or p in VERSIONED_FILES or DOCKERFILE.search(p) for p in paths)
 
 
 def check_version(merge):
-    version, tagged = merge["version"], merge["release_commit"]
+    """The version is a build number too: a device keeps its saved copy of the app until it changes. A release, made by
+    hand, gives the collected changes a version of its own."""
+    version, before = merge["version"], merge["previous_version"]
     if not version:
         return "problem", "No version found in usher/__init__.py at the merge commit."
-    if tagged == merge["sha"]:
-        return "ok", f"Version {version} is released at the merge commit."
-    if merge["dependabot"] and tagged:
-        return "info", f"Version {version} was released before: Dependabot's updates keep the version."
-    if tagged and ships_nothing(merge["files"]):
-        return "ok", f"Version {version} was released before: this merge changes no app code, so no release needed."
-    if superseded(merge):
-        return "info", f"Version {version} was released at a later commit: a later merge was released since."
-    if tagged:
-        return "problem", f"Version {version} was already released at an earlier commit: the version wasn't bumped."
-    return "problem", f"Version {version} has no release."
+    if version != before:
+        return "ok", f"The version changed to {version}."
+    if merge["dependabot"]:
+        return "info", f"The version stays {version}: Dependabot's updates keep it."
+    if not changes_the_app(merge["files"]):
+        return "ok", f"The version stays {version}: this merge changes no app code, so no new version is needed."
+    return "problem", f"The version is still {version}: it wasn't bumped, so devices may keep their saved copy of the app."
 
 
 def check_stable(merge):
@@ -122,7 +110,7 @@ def check_stable(merge):
     if status == "identical":
         return "ok", "`stable` is at the merge commit."
     if status == "ahead":
-        return "info", "`stable` is past the merge commit: a later merge was released since."
+        return "info", "`stable` is past the merge commit: a later merge was promoted since."
     return "problem", f"`stable` is not at the merge commit ({shown(status)})."
 
 
@@ -197,7 +185,7 @@ def is_problem_issue(issue):
     return str(issue.get("title", "")).startswith(PROBLEM_TITLE) and PROBLEM_LABELS <= labels_of(issue)
 
 
-CHECKS = (check_promote, check_image, check_version, check_stable, check_issues, check_files, check_priorities)
+CHECKS = (check_promote, check_version, check_stable, check_issues, check_files, check_priorities)
 
 
 def report(merge):
@@ -213,10 +201,16 @@ def report(merge):
     return verdict, "\n".join(lines) + "\n"
 
 
-def collect(api, sha, promote="success", now=None, image="success"):
+def version_at(api, ref):
+    """The version in usher/__init__.py at `ref`, or None."""
+    init = api.get(f"contents/usher/__init__.py?ref={ref}")
+    found = VERSION.search(base64.b64decode(init["content"]).decode("utf-8")) if init else None
+    return found.group(1) if found else None
+
+
+def collect(api, sha, promote="success", now=None):
     """Everything the checks read about the merge whose squash commit is `sha`; None when no pull request was
-    merged as that commit (a push straight to main). `promote` and `image` are the results of Release's
-    promote and image jobs."""
+    merged as that commit (a push straight to main). `promote` is the result of Promote's promote job."""
     now = now or datetime.datetime.now(datetime.timezone.utc)
     pulls = api.get(f"commits/{sha}/pulls") or []
     pull = next((p for p in pulls if p.get("merge_commit_sha") == sha and p.get("merged_at")), None)
@@ -224,15 +218,12 @@ def collect(api, sha, promote="success", now=None, image="success"):
         return None
     number = int(pull["number"])
     body = pull.get("body") or ""
-    init = api.get(f"contents/usher/__init__.py?ref={sha}")
-    found = VERSION.search(base64.b64decode(init["content"]).decode("utf-8")) if init else None
-    version = found.group(1) if found else None
-    release_commit = None
-    if version and api.get(f"releases/tags/v{version}"):
-        tagged = api.get(f"commits/v{version}")
-        release_commit = tagged["sha"] if tagged else None
+    version, previous_version = version_at(api, sha), None
+    commit = api.get(f"commits/{sha}")
+    parents = (commit or {}).get("parents") or []
+    if parents:
+        previous_version = version_at(api, parents[0]["sha"])
     compare = api.get(f"compare/{sha}...stable")
-    later = api.get(f"compare/{sha}...{release_commit}") if release_commit and release_commit != sha else None
     issues = {}
     for n in fixed_issues(body):
         issue = api.get(f"issues/{n}")
@@ -242,12 +233,10 @@ def collect(api, sha, promote="success", now=None, image="success"):
         "number": number,
         "sha": sha,
         "promote": promote,
-        "image": image,
         "dependabot": (pull.get("user") or {}).get("login") == DEPENDABOT,
         "body": body,
         "version": version,
-        "release_commit": release_commit,
-        "released_later": bool(later) and later["status"] == "ahead",
+        "previous_version": previous_version,
         "stable": compare["status"] if compare else "missing",
         "issues": issues,
         "files": [
@@ -299,7 +288,7 @@ def main(argv):
         raise SystemExit(__doc__)
     sha = argv[0]
     api = GitHub(os.environ["GITHUB_REPOSITORY"], os.environ["GH_TOKEN"], os.environ.get("GITHUB_API_URL", "https://api.github.com"))
-    merge = collect(api, sha, os.environ.get("PROMOTE") or "success", image=os.environ.get("IMAGE") or "success")
+    merge = collect(api, sha, os.environ.get("PROMOTE") or "success")
     if merge is None:
         verdict, text, outputs = "", f"No pull request was merged as {sha[:12]}, so there is no merge to report.\n", {}
     else:

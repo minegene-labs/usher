@@ -15,14 +15,17 @@ rules:
       - strip-footer.yml
   self-repository:
     ignore:
-      # "./.github/workflows/release.yml" is GitHub's documented form for a reusable workflow in the same
-      # repository and runs it at the caller's commit, which Release relies on. actionlint rejects the
+      # "./.github/workflows/promote.yml" is GitHub's documented form for a reusable workflow in the same
+      # repository and runs it at the caller's commit, which Promote relies on. actionlint rejects the
       # "$/..." form zizmor suggests.
       - auto-merge.yml
       # Same reusable workflow call as above, from Tests on main.
       - tests.yml
   artipacked:
     ignore:
-      # Release pushes the tested commit to the stable branch with the credentials the checkout keeps.
-      # It uploads no artifacts and runs no pull request code, so the stored token goes nowhere.
+      # Promote pushes the tested commit to the stable branch with the credentials the checkout keeps. It uploads
+      # no artifacts and runs no pull request code, so the stored token goes nowhere.
+      - promote.yml
+      # Release's prepare job pushes the release commit to main with the credentials the checkout keeps. It runs by
+      # hand, on main only, uploads no artifacts and runs no pull request code, so the stored token goes nowhere.
       - release.yml

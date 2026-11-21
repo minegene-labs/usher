@@ -1,4 +1,4 @@
-"""After each merge, Release reports on it by itself: a verdict (OK or PROBLEM) and one line per check, as a comment on
+"""After each merge, Promote reports on it by itself: a verdict (OK or PROBLEM) and one line per check, as a comment on
 the pull request and in the job summary. A PROBLEM opens or updates one issue and turns the run red. The checks live
 in .github/scripts/merge_report.py and are tested here without calling GitHub; made-up values only."""
 
@@ -39,12 +39,10 @@ def merge(**changes):
         "number": 42,
         "sha": SHA,
         "promote": "success",
-        "image": "success",
         "dependabot": False,
         "body": BODY,
         "version": "1.2.0",
-        "release_commit": SHA,
-        "released_later": False,
+        "previous_version": "1.1.0",
         "stable": "identical",
         "issues": {7: "closed"},
         "files": [{"filename": "README.md", "patch": "@@ -1 +1 @@\n-a\n+b"}],
@@ -77,7 +75,7 @@ class VerdictTests(unittest.TestCase):
         self.assertEqual(len(checks), len(report_mod.CHECKS))
         self.assertFalse([entry for entry in checks if entry.startswith("- **problem**")])
         self.assertEqual("- **ok**: The promote job finished.", line(lines, "promote job"))
-        self.assertIn("Version 1.2.0 is released at the merge commit.", line(lines, "Version"))
+        self.assertIn("The version changed to 1.2.0.", line(lines, "version"))
         self.assertIn("`stable` is at the merge commit.", line(lines, "`stable`"))
         self.assertIn("The issue it fixes is closed: #7.", line(lines, "fixes"))
         self.assertEqual("- **info**: Files flagged: none.", line(lines, "Files flagged"))
@@ -156,26 +154,9 @@ class PriorityLabelTests(unittest.TestCase):
 class PromoteTests(unittest.TestCase):
     def test_a_failed_promote_is_a_problem(self):
         for result in ("failure", "skipped"):
-            verdict, lines = run(promote=result, stable="behind", release_commit=None)
+            verdict, lines = run(promote=result, stable="behind")
             self.assertEqual(verdict, "PROBLEM", result)
-            self.assertIn(f"**problem**: The promote job didn't finish ({result}): `stable` may not have moved", line(lines, "promote job"))
-
-
-class ImageTests(unittest.TestCase):
-    def test_a_published_image_is_ok(self):
-        verdict, lines = run()
-        self.assertEqual("- **ok**: The image job finished: this version's container image is published.", line(lines, "image job"))
-
-    def test_a_failed_image_is_a_problem_even_though_promote_finished(self):
-        for result in ("failure", "cancelled", "skipped"):
-            verdict, lines = run(image=result)
-            self.assertEqual(verdict, "PROBLEM", result)
-            self.assertIn(f"**problem**: The image job didn't finish ({result}): the version's container image may not be", line(lines, "image job"))
-
-    def test_an_image_that_didnt_run_because_promote_failed_adds_no_second_problem(self):
-        verdict, lines = run(promote="failure", image="skipped", stable="behind", release_commit=None)
-        self.assertIn("**info**: The image job didn't run, because the promote job didn't finish.", line(lines, "image job"))
-        self.assertEqual(verdict, "PROBLEM")  # for promote's own failure, not the image
+            self.assertIn(f"**problem**: The promote job didn't finish ({result}): `stable` may not have moved.", line(lines, "promote job"))
 
 
 class FlaggedFileTests(unittest.TestCase):
@@ -210,40 +191,43 @@ class FlaggedFileTests(unittest.TestCase):
         self.assertTrue(flagged.endswith(" and 6 more."))
 
 
-class ReleaseAndStableTests(unittest.TestCase):
-    def test_version_not_released(self):
-        verdict, lines = run(release_commit=None)
-        self.assertEqual(verdict, "PROBLEM")
-        self.assertIn("Version 1.2.0 has no release.", line(lines, "Version"))
+class VersionTests(unittest.TestCase):
+    """The version is the build number that makes a device drop its saved copy of the app."""
 
-    def test_version_not_bumped(self):
-        verdict, lines = run(release_commit=EARLIER, files=[{"filename": "usher/server.py"}])
-        self.assertEqual(verdict, "PROBLEM")
-        self.assertIn("already released at an earlier commit", line(lines, "Version"))
+    def test_a_bump_is_ok(self):
+        verdict, lines = run(files=[{"filename": "usher/server.py"}])
+        self.assertEqual(verdict, "OK")
+        self.assertEqual("- **ok**: The version changed to 1.2.0.", line(lines, "version"))
 
-    def test_a_docs_only_merge_needs_no_new_version(self):
-        for paths in (["README.md"], ["docs/architecture.md", ".claude/settings.json", ".github/workflows/release.yml", "LICENSE"]):
-            verdict, lines = run(release_commit=EARLIER, files=[{"filename": p} for p in paths])
-            self.assertEqual(verdict, "OK", paths)
-            self.assertIn("no release needed", line(lines, "Version"))
-
-    def test_any_app_file_makes_a_missing_bump_a_problem(self):
+    def test_an_unchanged_version_is_a_problem_when_the_app_changed(self):
         for path in ("usher/server.py", "web/app.css", "deploy/compose.yaml", "Dockerfile", "tests/test_basics.py", "requirements.txt", "CHANGELOG.md"):
-            files = [{"filename": "README.md"}, {"filename": path}]
-            verdict, lines = run(release_commit=EARLIER, files=files)
+            verdict, lines = run(previous_version="1.2.0", files=[{"filename": "README.md"}, {"filename": path}])
             self.assertEqual(verdict, "PROBLEM", path)
-            self.assertIn("the version wasn't bumped", line(lines, "Version"))
+            self.assertIn("**problem**: The version is still 1.2.0: it wasn't bumped", line(lines, "version"))
 
-    def test_moving_a_file_out_of_the_app_is_a_problem(self):
+    def test_a_merge_that_changes_no_app_code_needs_no_new_version(self):
+        for paths in (["README.md"], ["docs/architecture.md", ".claude/settings.json", ".github/workflows/promote.yml", "LICENSE"]):
+            verdict, lines = run(previous_version="1.2.0", files=[{"filename": p} for p in paths])
+            self.assertEqual(verdict, "OK", paths)
+            self.assertIn("no new version is needed", line(lines, "version"))
+
+    def test_moving_a_file_out_of_the_app_counts_as_changing_it(self):
         files = [{"filename": "docs/old-server.md", "previous_filename": "usher/server.py"}]
-        self.assertEqual(run(release_commit=EARLIER, files=files)[0], "PROBLEM")
+        self.assertEqual(run(previous_version="1.2.0", files=files)[0], "PROBLEM")
 
-    def test_a_docs_only_merge_whose_version_has_no_release_is_still_a_problem(self):
-        self.assertEqual(run(release_commit=None)[0], "PROBLEM")
+    def test_dependabots_updates_keep_the_version(self):
+        verdict, lines = run(dependabot=True, issues={}, previous_version="1.2.0", files=[{"filename": "requirements.txt"}])
+        self.assertEqual(verdict, "OK")
+        self.assertIn("**info**: The version stays 1.2.0: Dependabot's updates keep it.", line(lines, "version"))
 
     def test_no_version_found(self):
         self.assertEqual(run(version=None)[0], "PROBLEM")
 
+    def test_a_first_commit_with_no_parent_is_not_compared(self):
+        self.assertEqual(run(previous_version=None)[0], "OK")
+
+
+class StableTests(unittest.TestCase):
     def test_stable_past_the_merge_is_fine_behind_is_not(self):
         verdict, lines = run(stable="ahead")
         self.assertEqual(verdict, "OK")
@@ -255,102 +239,45 @@ class ReleaseAndStableTests(unittest.TestCase):
 
 
 class SupersededMergeTests(unittest.TestCase):
-    """A merge whose report comes late, after a later merge moved `stable` past it and released its version at the later
-    commit. Both signs are needed: `stable` alone is also how a promote that failed after moving it would look."""
-
-    LATER = "89abcdef0123456789abcdef0123456789abcdef"
-
-    def superseded(self, **changes):
-        # Promote's fast-forward push is refused when `stable` is already past the commit, so promote failed and the
-        # image job, which needs it, never ran.
-        data = {
-            "stable": "ahead",
-            "released_later": True,
-            "promote": "failure",
-            "image": "skipped",
-            "release_commit": self.LATER,
-            "files": [{"filename": "usher/server.py"}],
-        }
-        data.update(changes)
-        return run(**data)
+    """A merge whose report comes late, after a later merge moved `stable` past it: promote's fast-forward push was
+    refused, so its promote job failed, though `stable` holds the merge."""
 
     def test_is_information_and_not_a_problem(self):
-        verdict, lines = self.superseded()
-        self.assertEqual(verdict, "OK")
-        self.assertEqual(lines[0], "OK: the merge of #42 (0123456789ab) passed every check.")
-        self.assertFalse([entry for entry in lines if entry.startswith("- **problem**")])
-        self.assertIn("**info**: The promote job didn't finish (failure), but `stable` is already past the merge commit", line(lines, "The promote job"))
-        self.assertIn("**info**: Version 1.2.0 was released at a later commit", line(lines, "Version"))
-        self.assertIn("**info**: `stable` is past the merge commit: a later merge was released since.", line(lines, "`stable` is past"))
-
-    def test_any_unfinished_promote_is_excused_once_both_signs_hold(self):
         for result in ("cancelled", "failure"):
-            self.assertEqual(self.superseded(promote=result)[0], "OK", result)
+            verdict, lines = run(stable="ahead", promote=result)
+            self.assertEqual(verdict, "OK", result)
+            self.assertEqual(lines[0], "OK: the merge of #42 (0123456789ab) passed every check.")
+            self.assertFalse([entry for entry in lines if entry.startswith("- **problem**")])
+            self.assertIn(f"**info**: The promote job didn't finish ({result}), but `stable` is already past the merge commit", line(lines, "The promote job"))
+            self.assertIn("**info**: `stable` is past the merge commit: a later merge was promoted since.", line(lines, "`stable` is past"))
 
-    def test_stable_ahead_alone_is_not_enough(self):
-        # Promote moved `stable`, then failed before it released the version, and a later merge went past it.
-        for tagged in (None, EARLIER):
-            verdict, lines = self.superseded(released_later=False, release_commit=tagged)
-            self.assertEqual(verdict, "PROBLEM", tagged)
+    def test_without_stable_past_it_the_failure_is_a_problem(self):
+        for status in ("behind", "diverged", "missing", "identical"):
+            verdict, lines = run(stable=status, promote="failure")
+            self.assertEqual(verdict, "PROBLEM", status)
             self.assertIn("**problem**: The promote job didn't finish (failure)", line(lines, "The promote job"))
-        self.assertIn("**problem**: Version 1.2.0 has no release.", line(self.superseded(released_later=False, release_commit=None)[1], "Version"))
-        self.assertIn("the version wasn't bumped", line(self.superseded(released_later=False, release_commit=EARLIER)[1], "Version"))
-
-    def test_a_failed_image_job_still_counts(self):
-        verdict, lines = self.superseded(image="failure")
-        self.assertEqual(verdict, "PROBLEM")
-        self.assertIn("**problem**: The image job didn't finish (failure)", line(lines, "image job"))
 
     def test_other_checks_still_count(self):
-        verdict, lines = self.superseded(issues={7: "open"}, unlabelled=[3])
+        verdict, lines = run(stable="ahead", promote="failure", issues={7: "open"}, unlabelled=[3])
         self.assertEqual(verdict, "PROBLEM")
         self.assertEqual(lines[0], "PROBLEM: the merge of #42 (0123456789ab) needs attention: 2 check(s) failed.")
         self.assertIn("**problem**: Not every issue it fixes is closed", line(lines, "fixes"))
 
-    def test_a_missing_version_is_not_a_late_report(self):
-        self.assertEqual(self.superseded(version=None)[0], "PROBLEM")
-
-    def test_a_merge_that_was_released_itself_is_still_ok_when_stable_moved_on(self):
+    def test_a_merge_that_was_promoted_itself_is_still_ok_when_stable_moved_on(self):
         verdict, lines = run(stable="ahead")
         self.assertEqual(verdict, "OK")
         self.assertEqual("- **ok**: The promote job finished.", line(lines, "The promote job"))
-        self.assertIn("Version 1.2.0 is released at the merge commit.", line(lines, "Version"))
-
-    def test_without_stable_past_it_the_same_failures_are_problems(self):
-        for status in ("behind", "diverged", "missing", "identical"):
-            files = [{"filename": "usher/server.py"}]
-            verdict, lines = run(stable=status, released_later=True, promote="failure", image="skipped", release_commit=self.LATER, files=files)
-            self.assertEqual(verdict, "PROBLEM", status)
-            self.assertIn("**problem**: The promote job didn't finish (failure)", line(lines, "The promote job"))
-            self.assertIn("**problem**: Version 1.2.0 was already released at an earlier commit", line(lines, "Version"))
-
-    def test_collect_reads_a_superseded_merge(self):
-        later = {f"compare/{SHA}...stable": {"status": "ahead"}, "commits/v1.2.0": {"sha": self.LATER}, f"compare/{SHA}...{self.LATER}": {"status": "ahead"}}
-        data = report_mod.collect(fake_github(**later), SHA, promote="failure", now=NOW, image="skipped")
-        self.assertEqual((data["stable"], data["release_commit"], data["released_later"]), ("ahead", self.LATER, True))
-        data["unlabelled"], data["files"] = [], [{"filename": "usher/server.py"}]  # the made-up open issues and files aren't the point
-        verdict, text = report_mod.report(data)
-        self.assertEqual(verdict, "OK", text)
-
-    def test_collect_does_not_call_a_tag_at_an_earlier_commit_or_the_merge_later(self):
-        for answer in ({"status": "behind"}, {"status": "diverged"}, None):
-            later = {"commits/v1.2.0": {"sha": self.LATER}, f"compare/{SHA}...{self.LATER}": answer}
-            self.assertFalse(report_mod.collect(fake_github(**later), SHA, now=NOW)["released_later"], answer)
-        self.assertFalse(report_mod.collect(fake_github(), SHA, now=NOW)["released_later"])  # released at the merge itself
-        none = {"releases/tags/v1.2.0": None}
-        self.assertFalse(report_mod.collect(fake_github(**none), SHA, now=NOW)["released_later"])
 
 
 class DependabotTests(unittest.TestCase):
-    def test_an_update_needs_no_issue_or_new_version(self):
-        verdict, lines = run(dependabot=True, body="Bumps example from 1.0 to 1.1.", issues={}, release_commit=EARLIER)
+    def test_an_update_needs_no_issue(self):
+        verdict, lines = run(dependabot=True, body="Bumps example from 1.0 to 1.1.", issues={}, previous_version="1.2.0")
         self.assertEqual(verdict, "OK")
-        for words in ("Fixed issue", "Version"):
-            self.assertIn("**info**", line(lines, words))
+        self.assertIn("**info**", line(lines, "Fixed issue"))
 
     def test_an_update_still_needs_stable_and_priority_labels(self):
-        self.assertEqual(run(dependabot=True, stable="behind", issues={}, release_commit=EARLIER)[0], "PROBLEM")
-        self.assertEqual(run(dependabot=True, unlabelled=[5], issues={}, release_commit=EARLIER)[0], "PROBLEM")
+        self.assertEqual(run(dependabot=True, stable="behind", issues={}, previous_version="1.2.0")[0], "PROBLEM")
+        self.assertEqual(run(dependabot=True, unlabelled=[5], issues={}, previous_version="1.2.0")[0], "PROBLEM")
 
 
 class FakeGitHub:
@@ -369,15 +296,17 @@ class FakeGitHub:
 
 
 def fake_github(**overrides):
-    init = base64.b64encode(b'"""Usher."""\n\n__version__ = "1.2.0"\n').decode()
+    def init(version):
+        return {"content": base64.b64encode(f'"""Usher."""\n\n__version__ = "{version}"\n'.encode()).decode(), "encoding": "base64"}
+
     answers = {
         f"commits/{SHA}/pulls": [
             {"number": 41, "merge_commit_sha": EARLIER, "merged_at": "2030-01-01T00:00:00Z"},
             {"number": 42, "merge_commit_sha": SHA, "merged_at": "2030-01-02T00:00:00Z", "body": BODY, "user": {"login": "example-user"}},
         ],
-        f"contents/usher/__init__.py?ref={SHA}": {"content": init, "encoding": "base64"},
-        "releases/tags/v1.2.0": {"tag_name": "v1.2.0"},
-        "commits/v1.2.0": {"sha": SHA},
+        f"commits/{SHA}": {"sha": SHA, "parents": [{"sha": EARLIER}]},
+        f"contents/usher/__init__.py?ref={SHA}": init("1.2.0"),
+        f"contents/usher/__init__.py?ref={EARLIER}": init("1.1.0"),
         f"compare/{SHA}...stable": {"status": "identical"},
         "issues/7": {"number": 7, "state": "closed"},
     }
@@ -402,11 +331,9 @@ class CollectTests(unittest.TestCase):
         data = report_mod.collect(fake_github(), SHA, now=NOW)
         self.assertEqual(data["number"], 42)
         self.assertEqual(data["promote"], "success")
-        self.assertEqual(data["image"], "success")
         self.assertFalse(data["dependabot"])
-        self.assertEqual(data["version"], "1.2.0")
-        self.assertEqual(data["release_commit"], SHA)
         self.assertEqual(data["stable"], "identical")
+        self.assertEqual((data["version"], data["previous_version"]), ("1.2.0", "1.1.0"))
         self.assertEqual(data["issues"], {7: "closed"})
         self.assertEqual(data["unlabelled"], [4, 8])  # not pull requests, the upstream issue or the one just opened
         self.assertEqual(data["problem_issue"], 6)  # the title alone isn't enough: #8 lacks the P1 label
@@ -421,9 +348,12 @@ class CollectTests(unittest.TestCase):
         unmerged = [{"number": 42, "merge_commit_sha": SHA, "merged_at": None}]
         self.assertIsNone(report_mod.collect(fake_github(**{f"commits/{SHA}/pulls": unmerged}), SHA))
 
-    def test_missing_release_stable_and_issue(self):
-        data = report_mod.collect(fake_github(**{"releases/tags/v1.2.0": None, f"compare/{SHA}...stable": None, "issues/7": None}), SHA)
-        self.assertIsNone(data["release_commit"])
+    def test_no_version_or_parent_is_read_as_none(self):
+        data = report_mod.collect(fake_github(**{f"contents/usher/__init__.py?ref={SHA}": None, f"commits/{SHA}": None}), SHA, now=NOW)
+        self.assertEqual((data["version"], data["previous_version"]), (None, None))
+
+    def test_missing_stable_and_issue(self):
+        data = report_mod.collect(fake_github(**{f"compare/{SHA}...stable": None, "issues/7": None}), SHA)
         self.assertEqual(data["stable"], "missing")
         self.assertEqual(data["issues"], {7: "missing"})
 
@@ -454,11 +384,6 @@ class MainTests(unittest.TestCase):
     def test_reports_a_failed_promote(self):
         printed, outputs = self.run_main(fake_github(), {"PROMOTE": "failure"})
         self.assertIn("**problem**: The promote job didn't finish (failure)", printed)
-        self.assertIn("verdict=PROBLEM\n", outputs)
-
-    def test_reports_a_failed_image(self):
-        printed, outputs = self.run_main(fake_github(), {"IMAGE": "failure"})
-        self.assertIn("**problem**: The image job didn't finish (failure)", printed)
         self.assertIn("verdict=PROBLEM\n", outputs)
 
     def test_no_pull_request_sets_no_outputs(self):
@@ -494,24 +419,24 @@ def _permissions(job):
     return {key: value for key, value in re.findall(r"(?m)^      ([\w-]+): (\w+)", block)}
 
 
-class ReleaseWorkflowTests(unittest.TestCase):
+class PromoteWorkflowTests(unittest.TestCase):
     """The report is one short job after promote, with only the permissions it needs."""
 
     def setUp(self):
-        self.text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+        self.text = (WORKFLOWS / "promote.yml").read_text(encoding="utf-8")
 
     def test_only_promote_can_write_to_stable(self):
         self.assertRegex(self.text, r"(?m)^permissions: \{\}$")
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", self.text.split("\njobs:\n", 1)[1]), ["promote", "image", "report"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", self.text.split("\njobs:\n", 1)[1]), ["promote", "report"])
         self.assertEqual(_permissions(_job(self.text, "promote")), {"contents": "write"})
         self.assertEqual(_permissions(_job(self.text, "report")), {"contents": "read", "pull-requests": "write", "issues": "write"})
 
     def test_report_runs_after_promote_even_when_it_failed_and_reads_github_only(self):
         job = _job(self.text, "report")
-        self.assertRegex(job, r"(?m)^    needs: \[promote, image\]$")
+        self.assertRegex(job, r"(?m)^    needs: \[promote\]$")
         self.assertRegex(job, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
         self.assertRegex(job, r"(?m)^      PROMOTE: \$\{\{ needs\.promote\.result \}\}$")
-        self.assertRegex(job, r"(?m)^      IMAGE: \$\{\{ needs\.image\.result \}\}$")
+        self.assertNotIn("IMAGE", job)
         self.assertIn("persist-credentials: false", job)
         self.assertIn("sparse-checkout: .github/scripts", job)
         self.assertIn('python3 .github/scripts/merge_report.py "$SHA"', job)
@@ -529,7 +454,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
 
     def test_one_report_at_a_time(self):
         job = _job(self.text, "report")
-        self.assertRegex(job, r"(?m)^    concurrency:\n      group: release-report\n      cancel-in-progress: false$")
+        self.assertRegex(job, r"(?m)^    concurrency:\n      group: promote-report\n      cancel-in-progress: false$")
 
     def test_no_expression_in_a_shell_line(self):
         runs = re.findall(r"(?m)^        run: (?:\|\n((?:          .*\n|\n)+)|(.*)\n)", self.text)
@@ -537,12 +462,10 @@ class ReleaseWorkflowTests(unittest.TestCase):
         for block in runs:
             self.assertNotIn("${{", "".join(block))
 
-    def test_callers_grant_what_release_needs(self):
+    def test_callers_grant_what_promote_needs(self):
         for name in ("tests.yml", "auto-merge.yml"):
-            job = _job((WORKFLOWS / name).read_text(encoding="utf-8"), "release")
-            expected = {"contents": "write", "pull-requests": "write", "issues": "write"}
-            expected |= {"packages": "write", "id-token": "write", "attestations": "write"}
-            self.assertEqual(_permissions(job), expected, name)
+            job = _job((WORKFLOWS / name).read_text(encoding="utf-8"), "promote")
+            self.assertEqual(_permissions(job), {"contents": "write", "pull-requests": "write", "issues": "write"}, name)
 
 
 def _step_script(text, name):
@@ -562,7 +485,7 @@ class CommentStepTests(unittest.TestCase):
     """The comment step's shell, run with a stand-in for gh that only records what it was asked."""
 
     def setUp(self):
-        text = (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+        text = (WORKFLOWS / "promote.yml").read_text(encoding="utf-8")
         self.script = _step_script(text, "Comment on the pull request, and open, update or close the problem issue")
 
     def run_step(self, verdict, open_issue=""):

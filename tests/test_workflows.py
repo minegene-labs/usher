@@ -1,5 +1,5 @@
-"""The merge → Tests → Release chain: a merge made by Auto-merge doesn't count as a push, so it starts Tests
-on main itself, and Tests calls Release (a workflow_run trigger wouldn't fire for that run)."""
+"""The merge → Tests → Promote chain: a merge made by Auto-merge doesn't count as a push, so it starts Tests
+on main itself, and Tests calls Promote (a workflow_run trigger wouldn't fire for that run)."""
 
 import re
 import subprocess
@@ -25,16 +25,16 @@ class AutoMergeChainTests(unittest.TestCase):
     def test_tests_can_be_started_by_hand(self):
         self.assertRegex(_on_block(_read("tests.yml")), r"(?m)^  workflow_dispatch:")
 
-    def test_release_is_called_by_tests_on_main_after_both_checks(self):
-        """A run started by Auto-merge's token can't start Release through workflow_run."""
-        release = _read("release.yml")
-        self.assertNotIn("workflow_run", _on_block(release))
-        self.assertNotIn("github.event.workflow_run", release)
-        self.assertRegex(_on_block(release), r"(?m)^  workflow_call:")
-        job = re.search(r"(?m)^  release:\n((?:    .*\n|\n)+)", _read("tests.yml"))
-        self.assertIsNotNone(job, "Tests has no release job")
+    def test_promote_is_called_by_tests_on_main_after_both_checks(self):
+        """A run started by Auto-merge's token can't start Promote through workflow_run."""
+        promote = _read("promote.yml")
+        self.assertNotIn("workflow_run", _on_block(promote))
+        self.assertNotIn("github.event.workflow_run", promote)
+        self.assertRegex(_on_block(promote), r"(?m)^  workflow_call:")
+        job = re.search(r"(?m)^  promote:\n((?:    .*\n|\n)+)", _read("tests.yml"))
+        self.assertIsNotNone(job, "Tests has no promote job")
         job = job.group(1)
-        self.assertRegex(job, r"(?m)^    uses: \./\.github/workflows/release\.yml$")
+        self.assertRegex(job, r"(?m)^    uses: \./\.github/workflows/promote\.yml$")
         needs = re.search(r"(?m)^    needs: \[(.*)\]$", job).group(1)
         self.assertEqual({n.strip() for n in needs.split(",")}, {"test"})  # tests and privacy check: one job
         cond = re.search(r"(?m)^    if: (.*)$", job).group(1)
@@ -42,12 +42,20 @@ class AutoMergeChainTests(unittest.TestCase):
         self.assertIn("github.event_name != 'pull_request'", cond)
         self.assertRegex(job, r"(?m)^      contents: write$")
 
-    def test_release_promotes_the_commit_tests_checked(self):
-        release = _read("release.yml")
-        self.assertIn('git push origin "$SHA:refs/heads/stable"', release)
-        self.assertIn("SHA: ${{ inputs.sha || github.sha }}", release)
-        self.assertIn("ref: ${{ inputs.sha || github.sha }}", release)
-        self.assertIn("group: release", release)
+    def test_promote_moves_stable_to_the_commit_tests_checked(self):
+        promote = _read("promote.yml")
+        self.assertIn('git push origin "$SHA:refs/heads/stable"', promote)
+        self.assertIn("SHA: ${{ inputs.sha || github.sha }}", promote)
+        self.assertIn("ref: ${{ inputs.sha || github.sha }}", promote)
+        self.assertIn("group: promote\n", promote)
+
+    def test_a_merge_releases_nothing(self):
+        """Releases are made by hand (Release, tests/test_release_workflow.py): nothing a merge starts tags, publishes
+        a release or builds an image."""
+        for name in ("promote.yml", "tests.yml", "auto-merge.yml"):
+            text = _read(name)
+            for word in ("gh release", "buildx", "docker login", "uses: ./.github/workflows/release.yml"):
+                self.assertNotIn(word, text, f"{name}: {word}")
 
     def test_auto_merge_closes_the_issues_a_pr_fixes(self):
         """A merge made with the workflow's own token doesn't close `Fixes #n` issues by itself."""
@@ -87,7 +95,7 @@ class ActionsMinutesTests(unittest.TestCase):
 
     def test_tests_and_privacy_check_are_one_job(self):
         text = _read("tests.yml")
-        self.assertEqual(_jobs(text), ["test", "release"])
+        self.assertEqual(_jobs(text), ["test", "promote"])
         test_job = re.search(r"(?m)^  test:\n((?:    .*\n|\n)+)", text).group(1)
         self.assertIn("coverage run -m unittest discover -s tests -t .", test_job)
         self.assertIn("PRIVACY_PATTERNS", test_job)
@@ -104,7 +112,7 @@ class ActionsMinutesTests(unittest.TestCase):
         self.assertIsNotNone(block, "Tests has no workflow-level concurrency")
         block = block.group(1)
         self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", block)
-        # Runs on main get a group each (run_id), so a later one can't cancel or replace a pending release.
+        # Runs on main get a group each (run_id), so a later one can't cancel or replace a pending promotion.
         self.assertIn("github.event_name == 'pull_request' && github.ref || github.run_id", block)
 
     def test_dependabot_is_monthly_and_grouped(self):
@@ -116,9 +124,9 @@ class ActionsMinutesTests(unittest.TestCase):
         self.assertNotIn("interval: daily", text)
         self.assertEqual(len(re.findall(r'(?m)^        patterns: \["\*"\]$', text)), len(ecosystems))
 
-    def test_auto_merge_releases_without_a_second_run_when_it_is_safe(self):
+    def test_auto_merge_promotes_without_a_second_run_when_it_is_safe(self):
         text = _read("auto-merge.yml")
-        self.assertIn("release_sha=$merged", text)
+        self.assertIn("promote_sha=$merged", text)
         # Safe only if the squash commit holds exactly the tree of the head commit Tests passed on.
         self.assertIn('git/commits/$merged" --jq \'.tree.sha\'', text)
         self.assertIn('git/commits/$SHA" --jq \'.tree.sha\'', text)
@@ -127,14 +135,14 @@ class ActionsMinutesTests(unittest.TestCase):
         # Dependabot's runs skip the privacy check, so their merges are always tested on main.
         self.assertIn("TESTED_BY: ${{ github.event.workflow_run.actor.login }}", text)
         self.assertIn('[ "$TESTED_BY" != "dependabot[bot]" ]', text)
-        job = re.search(r"(?m)^  release:\n((?:    .*\n|\n)+)", text)
-        self.assertIsNotNone(job, "Auto-merge has no release job")
+        job = re.search(r"(?m)^  promote:\n((?:    .*\n|\n)+)", text)
+        self.assertIsNotNone(job, "Auto-merge has no promote job")
         job = job.group(1)
         self.assertRegex(job, r"(?m)^    needs: \[merge\]$")
-        self.assertIn("if: needs.merge.outputs.release_sha != ''", job)
-        self.assertRegex(job, r"(?m)^    uses: \./\.github/workflows/release\.yml$")
-        self.assertIn("sha: ${{ needs.merge.outputs.release_sha }}", job)
-        self.assertRegex(_on_block(_read("release.yml")), r"(?m)^      sha:\n")
+        self.assertIn("if: needs.merge.outputs.promote_sha != ''", job)
+        self.assertRegex(job, r"(?m)^    uses: \./\.github/workflows/promote\.yml$")
+        self.assertIn("sha: ${{ needs.merge.outputs.promote_sha }}", job)
+        self.assertRegex(_on_block(_read("promote.yml")), r"(?m)^      sha:\n")
 
 
 class UpstreamCheckTests(unittest.TestCase):
@@ -277,7 +285,7 @@ class ReleaseNotesTests(unittest.TestCase):
         text = _read("auto-merge.yml")
         self.assertIn("grep -xE 'bug|enhancement|feature'", text)
         self.assertIn('issues/$number/labels" -f "labels[]=$label"', text)
-        # Labelled before merging, so the release made from the merge already sees them.
+        # Labelled before merging, so the merged pull request can be filtered by type at once.
         self.assertLess(text.index('issues/$number/labels"'), text.index("gh pr merge"))
 
     def test_release_doesnt_read_pull_request_titles(self):

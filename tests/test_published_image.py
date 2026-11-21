@@ -1,4 +1,4 @@
-"""The published image and the one generic compose file. Release builds the image for amd64 and arm64, pushes it with
+"""The published image and the one generic compose file. Release, run by hand, builds the image for amd64 and arm64, pushes it with
 the version and latest as tags and attests its build provenance; compose.yaml at the repository root runs that image
 with nothing from the machine it runs on. The maintainer's own deploy (deploy/compose.yaml) keeps building from source.
 The workflow and the files are read, not run: no registry is called."""
@@ -22,6 +22,10 @@ DOCKERFILE = ROOT / "Dockerfile"
 
 def _release():
     return (WORKFLOWS / "release.yml").read_text(encoding="utf-8")
+
+
+def _promote():
+    return (WORKFLOWS / "promote.yml").read_text(encoding="utf-8")
 
 
 def _service(text):
@@ -65,9 +69,10 @@ class ReleaseImageTests(unittest.TestCase):
         self.assertRegex(check, r'\*"not found"\*\) echo "publish=yes"')
         self.assertRegex(check, r"\*\) echo \"::error::Could not tell[^\n]*exit 1")
 
-    def test_runs_only_after_a_successful_promote_with_only_its_own_permissions(self):
-        self.assertRegex(self.job, r"(?m)^    needs: \[promote\]$")
-        self.assertIn("needs.promote.result == 'success'", self.job)
+    def test_runs_only_after_a_published_release_with_only_its_own_permissions(self):
+        self.assertRegex(self.job, r"(?m)^    needs: \[prepare, publish\]$")
+        self.assertIn("needs.publish.result == 'success'", self.job)
+        self.assertIn("ref: ${{ needs.prepare.outputs.sha }}", self.job)
         self.assertEqual(_permissions(self.job), {"contents": "read", "packages": "write", "id-token": "write", "attestations": "write"})
         self.assertIn("persist-credentials: false", self.job)
         self.assertNotIn("secrets.", self.job)
@@ -81,10 +86,16 @@ class ReleaseImageTests(unittest.TestCase):
         self.assertNotIn("GH_TOKEN", self.job)
 
     def test_the_other_jobs_cannot_publish_a_package(self):
-        for name in ("promote", "report"):
-            permissions = _permissions(_job(_release(), name))
+        jobs = [(_release(), "prepare"), (_release(), "publish"), (_promote(), "promote"), (_promote(), "report")]
+        for text, name in jobs:
+            permissions = _permissions(_job(text, name))
             for scope in ("packages", "id-token", "attestations"):
                 self.assertNotIn(scope, permissions, name)
+
+    def test_a_merge_publishes_no_image(self):
+        """The image is made by the Release workflow, run by hand; nothing a merge starts builds or tags one."""
+        self.assertNotIn("buildx", _promote())
+        self.assertNotIn("packages", _promote())
 
     def test_the_image_says_where_it_came_from(self):
         for label in ("source", "revision", "version", "licenses"):

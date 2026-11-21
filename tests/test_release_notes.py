@@ -122,33 +122,40 @@ class CommandLineTests(unittest.TestCase):
         self.assertIn("Usage", done.stderr)
 
 
-def _step(name):
-    found = re.search(rf"(?m)^      - name: {re.escape(name)}\n((?:        .*\n|\n)+)", RELEASE)
+def _step(job, name):
+    found = re.search(rf"(?m)^      - name: {re.escape(name)}\n((?:        .*\n|\n)+)", job)
     assert found, f"no step {name}"
+    return found.group(1)
+
+
+def _job(name):
+    found = re.search(rf"(?m)^  {name}:\n((?:    .*\n|\n)+)", RELEASE)
+    assert found, f"no job {name}"
     return found.group(1)
 
 
 class WorkflowTests(unittest.TestCase):
     def test_the_notes_are_built_without_the_token(self):
-        build = _step("Build the release notes from CHANGELOG.md")
-        self.assertIn('python3 .github/scripts/release_notes.py "$v" "$RUNNER_TEMP/release-notes.md"', build)
+        publish = _job("publish")
+        build = _step(publish, "Build the release notes from CHANGELOG.md")
+        self.assertIn('python3 .github/scripts/release_notes.py "$VERSION" "$RUNNER_TEMP/release-notes.md"', build)
         self.assertNotIn("GH_TOKEN", build)
         self.assertNotIn("github.token", build)
-        job_settings = RELEASE.split("  report:", 1)[0].split("    steps:", 1)[0]
+        job_settings = publish.split("    steps:", 1)[0]
         self.assertNotRegex(job_settings, r"GH_TOKEN|github\.token")  # not on the whole job either
 
     def test_only_the_create_step_has_the_token(self):
-        publish = _step("Publish a release for a new version")
-        self.assertIn("GH_TOKEN: ${{ github.token }}", publish)
-        self.assertIn('--notes-file "$RUNNER_TEMP/release-notes.md"', publish)
-        promote = RELEASE.split("  image:", 1)[0]  # the promote job alone: the image job has its own token step
-        self.assertEqual(promote.count("github.token"), 1)
-        self.assertNotIn("GH_TOKEN", _step("Move stable to the tested commit (fast-forward only)"))
+        publish = _job("publish")
+        create = _step(publish, "Publish the release")
+        self.assertIn("GH_TOKEN: ${{ github.token }}", create)
+        self.assertIn('--notes-file "$RUNNER_TEMP/release-notes.md"', create)
+        self.assertEqual(publish.count("github.token"), 1)
+        self.assertNotIn("GH_TOKEN", _step(_job("prepare"), "Commit and push to main"))  # it pushes with the checkout's own credentials
 
     def test_the_version_reaches_the_shell_as_a_variable(self):
-        publish = _step("Publish a release for a new version")
-        self.assertIn("VERSION: ${{ steps.notes.outputs.version }}", publish)
-        run = publish.split("        run: |\n", 1)[1]
+        publish = _job("publish")
+        self.assertIn("VERSION: ${{ needs.prepare.outputs.version }}", publish)
+        run = _step(publish, "Publish the release").split("        run: |\n", 1)[1]
         self.assertNotIn("${{", run)
 
 

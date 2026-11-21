@@ -1,6 +1,6 @@
 """Safe for pull requests from forks: once anyone can open one, no workflow may run a fork's code with a token
 that can write, Auto-merge never merges one, and Tests' check for identifying details (which needs a secret a
-fork's run doesn't get) waits for main, where a person's merge starts Tests before Release."""
+fork's run doesn't get) waits for main, where a person's merge starts Tests before Promote."""
 
 import re
 import shutil
@@ -441,7 +441,7 @@ class AutoMergeForkTests(unittest.TestCase):
 
 def _privacy_step():
     text = _read("tests.yml")
-    return text.split("- name: Look for identifying details\n", 1)[1].split("\n  release:", 1)[0]
+    return text.split("- name: Look for identifying details\n", 1)[1].split("\n  promote:", 1)[0]
 
 
 def _run_privacy_check(folder, from_fork, patterns, path_first=None):
@@ -468,7 +468,7 @@ def _run_privacy_check(folder, from_fork, patterns, path_first=None):
 
 class PrivacyCheckOnForksTests(unittest.TestCase):
     """A fork's pull request gets no secrets: the identifying-details check waits for main, where a person's
-    merge starts Tests (and Release only after it)."""
+    merge starts Tests (and Promote only after it)."""
 
     def test_the_step_knows_a_fork_from_the_event(self):
         step = _privacy_step()

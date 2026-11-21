@@ -1,0 +1,97 @@
+name: Promote
+# Called by Tests once the tests and the privacy check pass on main (a push, or a run Auto-merge starts
+# after a merge), or by Auto-merge with the squash commit when the pull request's own run already tested
+# exactly that commit's content: move the stable branch (which the server deploys from) to that commit, then
+# report on the merge. Nothing is released here: a release, with its tag, notes and container image, is made
+# by hand with the Release workflow (release.yml). It isn't a workflow_run of Tests: GitHub doesn't send that
+# event for a run started with a workflow's own token, so merges made by Auto-merge would never be promoted.
+# The report job, also when promote failed, checks the merge (.github/scripts/merge_report.py lists what) and
+# comments the result on the pull request. Each job asks for its own permissions: only promote can write to
+# stable, and only report can comment or write issues. A caller grants the sum of both. Each run reports the
+# commit it was called for; a merge whose run never starts (superseded by a later one) isn't reported.
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: The commit to promote; the caller's commit when empty.
+        type: string
+        default: ""
+permissions: {}
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write    # move stable
+    concurrency:
+      group: promote
+      cancel-in-progress: false
+    env:
+      SHA: ${{ inputs.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          fetch-depth: 0
+      - name: Move stable to the tested commit (fast-forward only)
+        run: git push origin "$SHA:refs/heads/stable"
+
+  report:
+    # One short job after promote, also when it failed (then the report says so): the verdict and one line
+    # per check, as a comment on the merged pull request and in the job summary. A PROBLEM opens or updates the one
+    # "Merge problem" issue (found by its title and its bug and P1 labels) and turns the run red; the next OK closes
+    # that issue. A push to main that no pull request made has nothing to report. One report at a time, so two
+    # quick merges never open two problem issues.
+    needs: [promote]
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: promote-report
+      cancel-in-progress: false
+    permissions:
+      contents: read          # the commit, stable
+      pull-requests: write    # read the pull request and its files, comment on it
+      issues: write           # read the open issues, open, update or close the problem issue
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ inputs.sha || github.sha }}
+      PROMOTE: ${{ needs.promote.result }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Check the merge
+        id: report
+        run: |
+          python3 .github/scripts/merge_report.py "$SHA" > "$RUNNER_TEMP/merge-report.md"
+          cat "$RUNNER_TEMP/merge-report.md" >> "$GITHUB_STEP_SUMMARY"
+      - name: Comment on the pull request, and open, update or close the problem issue
+        if: steps.report.outputs.number != ''
+        env:
+          NUMBER: ${{ steps.report.outputs.number }}
+          VERDICT: ${{ steps.report.outputs.verdict }}
+          OPEN_ISSUE: ${{ steps.report.outputs.open_issue }}
+        run: |
+          report="$RUNNER_TEMP/merge-report.md"
+          gh api "repos/$GH_REPO/issues/$NUMBER/comments" -F body=@"$report" > /dev/null
+          if [ "$VERDICT" = OK ]; then
+            [ -n "$OPEN_ISSUE" ] || exit 0
+            printf 'The merge of #%s reported OK.\n' "$NUMBER" > "$RUNNER_TEMP/note"
+            gh api "repos/$GH_REPO/issues/$OPEN_ISSUE/comments" -F body=@"$RUNNER_TEMP/note" > /dev/null
+            gh api -X PATCH "repos/$GH_REPO/issues/$OPEN_ISSUE" -f state=closed -f state_reason=completed > /dev/null
+            exit 0
+          fi
+          { cat "$report"; printf '\n%s\n' "This issue closes by itself when the next merge reports OK."; } > "$RUNNER_TEMP/issue.md"
+          if [ -n "$OPEN_ISSUE" ]; then
+            gh api -X PATCH "repos/$GH_REPO/issues/$OPEN_ISSUE" -f "title=Merge problem: PR #$NUMBER" \
+              -f "labels[]=bug" -f "labels[]=P1" -F body=@"$RUNNER_TEMP/issue.md" > /dev/null
+          else
+            gh api "repos/$GH_REPO/issues" -f "title=Merge problem: PR #$NUMBER" \
+              -f "labels[]=bug" -f "labels[]=P1" -F body=@"$RUNNER_TEMP/issue.md" > /dev/null
+          fi
+          echo "::error::The merge of #$NUMBER has a problem; see the comment on it and the Merge problem issue."
+          exit 1

@@ -13,7 +13,7 @@ permissions:
   pull-requests: read    # the pull request text is read at run time
 concurrency:
   # A new push to a pull request cancels the run for its previous commit. Runs on main each get a group
-  # of their own, so they are never cancelled or replaced by a later one (each may release).
+  # of their own, so they are never cancelled or replaced by a later one (each may be promoted).
   group: tests-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
@@ -95,7 +95,7 @@ jobs:
           coverage report
 
       - name: Build the image
-        # Build only, nothing is started: a Dockerfile that doesn't parse or build fails here, before Release
+        # Build only, nothing is started: a Dockerfile that doesn't parse or build fails here, before Promote
         # can move stable. The slower start-up check stays in the Weekly checks workflow.
         run: docker build -t usher-check .
 
@@ -147,7 +147,7 @@ jobs:
         # change version numbers, so they skip this; Auto-merge then tests main again.
         # A pull request from a fork gets no secrets either, so it is skipped with a
         # notice and a line in the run's summary: a person merges it by hand, and that push to main runs this step
-        # before Release moves stable. Without the secret, a run here still fails.
+        # before Promote moves stable. Without the secret, a run here still fails.
         if: github.actor != 'dependabot[bot]'
         env:
           PATTERNS: ${{ secrets.PRIVACY_PATTERNS }}
@@ -206,15 +206,12 @@ jobs:
           fi
           echo "No identifying details found ($(grep -c . "$RUNNER_TEMP/patterns") patterns checked)."
 
-  release:
+  promote:
     # On main only (a push, or the run Auto-merge starts after merging), once the tests and the privacy check pass.
     needs: [test]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    uses: ./.github/workflows/release.yml
-    permissions:    # the ceiling for Release, whose jobs each take only their part (see release.yml)
+    uses: ./.github/workflows/promote.yml
+    permissions:    # the ceiling for Promote, whose jobs each take only their part (see promote.yml)
       contents: write
       pull-requests: write
       issues: write
-      packages: write
-      id-token: write
-      attestations: write

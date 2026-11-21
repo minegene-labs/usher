@@ -35,7 +35,7 @@ class PullRequestGateTests(unittest.TestCase):
 
     def test_no_extra_job_on_pull_requests(self):
         jobs = re.search(r"(?m)^jobs:\n((?:[ #].*\n|\n)+)", self.tests_yml).group(1)
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", jobs), ["test", "release"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", jobs), ["test", "promote"])
 
 
 class WeeklyChecksTests(unittest.TestCase):
