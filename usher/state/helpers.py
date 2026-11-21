@@ -1,9 +1,9 @@
 """Small pure helpers the state modules share: time, labels, recycle bin usage and plain-language health."""
 
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from .. import config
+from .. import clock, config
 
 
 def couldnt_find_after():
@@ -40,8 +40,7 @@ def iso(dt):
 
 def local_time(ts):
     """A Unix time as the server's local clock time, e.g. 21:30, for messages people read."""
-    off = timezone(timedelta(minutes=config.get("server.utc_offset_minutes")))
-    return datetime.fromtimestamp(ts, off).strftime("%H:%M")
+    return datetime.fromtimestamp(ts, clock.zone()).strftime("%H:%M")
 
 
 def episode_label(season, number):

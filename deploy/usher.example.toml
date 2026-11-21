@@ -15,7 +15,6 @@
 origin = "https://usher.example.net"        # the address people open Usher at
 bind = "127.0.0.1:8484"                     # where the server listens (behind the reverse proxy); leave it out in the published image
 data_dir = "/data"                          # accounts, requests and preferences
-utc_offset_minutes = 0                      # time zone as minutes ahead of UTC, for times in Status and messages
 session_days = 90                           # how long a device stays signed in
 trusted_proxies = ["127.0.0.1", "::1"]      # reverse proxies whose X-Forwarded-For is believed
 push_contact = ""                           # contact sent to the push services; empty = origin

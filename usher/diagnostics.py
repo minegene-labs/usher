@@ -6,9 +6,9 @@ import threading
 import time
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-from . import __version__, config
+from . import __version__, clock
 from .cache import TTLCache
 from .clients import ApiError
 from .state.helpers import episode_label
@@ -219,8 +219,7 @@ class Diagnostics:
 
 
 def _short(dt):
-    local = timezone(timedelta(minutes=config.get("server.utc_offset_minutes")))  # the server's local offset
-    return dt.astimezone(local).strftime("%-d %b %H:%M") if dt else ""
+    return clock.to_local(dt).strftime("%-d %b %H:%M") if dt else ""
 
 
 def _ago(ts):

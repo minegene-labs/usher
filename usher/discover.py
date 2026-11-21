@@ -13,9 +13,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
-from . import config
+from . import clock, config
 from .search import _ratings
 from .cache import MISSING, TTLCache
 from .clients import ApiError
@@ -241,8 +241,7 @@ class Discover(Picks, DiscoverRows):
     SKIP_GENRES = "10763|10767"  # News, Talk
 
     def _today(self):
-        offset = config.get("server.utc_offset_minutes")
-        return datetime.now(timezone(timedelta(minutes=offset))).date()
+        return clock.today()
 
     UPCOMING_TTL = 3 * 3600
 

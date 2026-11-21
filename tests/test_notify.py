@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
-from usher import config
 from usher.notify import Notifier
 from usher.store import Store
 
@@ -33,9 +32,9 @@ def req(rid, step, title="Example Show", stuck=False):
 class NotifyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        offset = mock.patch.object(config, "_active", config.Source("usher.toml (made up)", {"server.utc_offset_minutes": 600}))
-        offset.start()
-        self.addCleanup(offset.stop)
+        zone = mock.patch.dict("os." + "environ", {"TZ": "Etc/GMT-10"})  # UTC+10, no clock changes
+        zone.start()
+        self.addCleanup(zone.stop)
         self.store = Store(Path(self.tmp.name))
         self.store.add_user("alex", "Alex", "x")
         self.store.add_user("sam", "Sam", "x")
@@ -134,7 +133,7 @@ class NotifyTests(unittest.TestCase):
         h = Handler()
         h.save_prefs({"user_id": 1}, {"quiet_on": False, "quiet_start": "21:00", "ready": False})
         prefs = h.notify_body({"user_id": 1})["prefs"]
-        self.assertEqual(sorted(prefs), ["problem", "ready", "server", "space", "tz_offset"])
+        self.assertEqual(sorted(prefs), ["problem", "ready", "server", "space"])
         self.assertIs(prefs["ready"], False)
 
     def test_preferences_respected(self):

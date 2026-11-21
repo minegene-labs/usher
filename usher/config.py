@@ -41,10 +41,6 @@ def _at_least(n):
     return lambda v: "" if v >= n else f"must be {n} or more"
 
 
-def _offset(v):
-    return "" if -14 * 60 <= v <= 14 * 60 else "must be between -840 and 840 (minutes ahead of UTC)"
-
-
 def _shortcut_link(v):
     return (
         ""
@@ -78,13 +74,6 @@ KEYS = {
             help="Address and port the server listens on; the published image listens on all addresses unless this says otherwise",
         ),
         Key("server.data_dir", str, "/data", help="Where accounts, requests and settings are kept"),
-        Key(
-            "server.utc_offset_minutes",
-            int,
-            0,
-            check=_offset,
-            help="The server's time zone as minutes ahead of UTC, for times shown in Status and messages",
-        ),
         Key("server.session_days", int, 90, check=_at_least(1), help="Days a device stays signed in"),
         Key(
             "server.trusted_proxies",
@@ -195,8 +184,9 @@ KEYS = {
     )
 }
 
-# Settings that no longer do anything. A usher.toml that still sets one starts as before, with the value ignored.
-RETIRED = {"notifications.quiet_start", "notifications.quiet_end", "updates.notices"}
+# Settings that no longer do anything. A usher.toml that still sets one starts as before, with the value ignored and
+# a note in the log. The server's time zone is the container's TZ now (usher/clock.py).
+RETIRED = {"notifications.quiet_start", "notifications.quiet_end", "updates.notices", "server.utc_offset_minutes"}
 
 SECTIONS = {".".join(k.split(".")[:i]) for k in set(KEYS) | RETIRED for i in range(1, k.count(".") + 1)}
 
@@ -218,16 +208,17 @@ def _checked(key, value, where):
     return value
 
 
-def _flatten(table, prefix, where):
+def _flatten(table, prefix, where, ignored=None):
     out = {}
     for k, v in table.items():
         name = f"{prefix}{k}"
         if isinstance(v, dict):
             if name not in SECTIONS:
                 raise ConfigError(f"[{name}] is not a section Usher knows ({where})")
-            out.update(_flatten(v, name + ".", where))
+            out.update(_flatten(v, name + ".", where, ignored))
         elif name in RETIRED:
-            continue
+            if ignored is not None:
+                ignored.append(name)
         elif name not in KEYS:
             raise ConfigError(f"{name} is not a setting Usher knows ({where})")
         else:
@@ -235,13 +226,14 @@ def _flatten(table, prefix, where):
     return out
 
 
-def parse(text: str, where: str = "usher.toml") -> dict:
-    """usher.toml's text -> {key name: value}, only the keys it sets. Raises ConfigError naming the key at fault."""
+def parse(text: str, where: str = "usher.toml", ignored: list | None = None) -> dict:
+    """usher.toml's text -> {key name: value}, only the keys it sets; retired keys it sets are added to `ignored`.
+    Raises ConfigError naming the key at fault."""
     try:
         table = tomllib.loads(text)
     except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"{where} isn't valid TOML: {e}") from None
-    values = _flatten(table, "", where)
+    values = _flatten(table, "", where, ignored)
     for name, v in values.items():
         key = KEYS[name]
         ok = (
@@ -261,6 +253,7 @@ def parse(text: str, where: str = "usher.toml") -> dict:
 class Source:
     path: str
     values: dict | None  # what usher.toml sets, or None when there's no file (every key keeps its default)
+    ignored: tuple = ()  # retired keys the file still sets
 
 
 _active: Source | None = None
@@ -278,7 +271,9 @@ def read(path: str | None = None) -> Source:
         return Source(path, None)
     except OSError as e:
         raise ConfigError(f"Can't read {path}: {e.strerror}") from None
-    return Source(path, parse(text, path))
+    ignored = []
+    values = parse(text, path, ignored)
+    return Source(path, values, tuple(ignored))
 
 
 def activate(source: Source | None):
@@ -343,21 +338,30 @@ def missing_file(source: Source) -> str:
     return f"No {source.path}: Usher can't start without it. Copy {EXAMPLE} there and fill it in."
 
 
+def _zone_notes():
+    from . import clock  # clock reads config, so it is imported here
+
+    name = _env("TZ")
+    return [f"TZ is {name!r}, which is not a time zone name such as Europe/Paris: times are shown in UTC."] if name and not clock.valid(name) else []
+
+
 def check(source: Source, strict: bool = True, setting_up: bool = False) -> list:
     """Validate everything for start-up and return warnings for the log and /healthz. Raises ConfigError when the
     server shouldn't start. While an install is still being set up in the browser there may be no usher.toml and no
     viewing account yet, and that is no problem."""
     if setting_up:
         return []
+    notes = [f"{name} in {source.path} is no longer used and is ignored." for name in source.ignored]
+    notes += _zone_notes()
     if source.values is None:
         if strict:
             raise ConfigError(missing_file(source))
-        return [missing_file(source)]
+        return notes + [missing_file(source)]
     if strict and not source.values.get("media_server.user_id"):
         raise ConfigError(
             f"media_server.user_id is required ({source.path}): the ID of the media server account whose watch history Usher shows. usher-user ids lists them."
         )
-    return []
+    return notes
 
 
 # settings the rest of the server uses ------------------------------------------------------------------------

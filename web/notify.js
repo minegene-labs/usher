@@ -43,7 +43,7 @@ export const Notify = (Base) => class extends Base {
   drawNotify(body, data, here) {
     const denied = Notification.permission === "denied";
     const save = async (values) => {
-      try { store.notify = await api("/api/notify", { method: "POST", body: { ...values, tz_offset: push.tz() } }); }
+      try { store.notify = await api("/api/notify", { method: "POST", body: values }); }
       catch (e) { this.toast(e.message); }
     };
     const toggle = (key, label, hint) => h("label", { class: `row switch-row${here ? "" : " off"}` },
@@ -75,7 +75,7 @@ export const Notify = (Base) => class extends Base {
       const reg = await navigator.serviceWorker.ready;
       let sub = await reg.pushManager.getSubscription();
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: push.key(key) });
-      store.notify = await api("/api/push/subscribe", { method: "POST", body: { subscription: sub.toJSON(), tz_offset: push.tz() } });
+      store.notify = await api("/api/push/subscribe", { method: "POST", body: { subscription: sub.toJSON() } });
       this.toast("Notifications are on for this device.");
       return true;
     } catch (e) { this.toast(e.message || "Couldn't turn on notifications."); return false; }

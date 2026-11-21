@@ -21,7 +21,6 @@ export const push = {
     if (push.supported() && (!push.ios() || push.installed())) return null;
     return push.ios() && !push.installed() ? "install" : "unsupported";
   },
-  tz: () => -new Date().getTimezoneOffset(),
 };
 
 // ---- away from home: Usher is only reachable on the home network or through Tailscale ------------
