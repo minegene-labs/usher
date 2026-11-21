@@ -1,6 +1,6 @@
 # Usher from its published image: one file, nothing else needed to start it. Docker Compose treats every file as
 # trusted code, so read it (`docker compose config` prints what it runs) before you start it. It mounts no folder of
-# this machine and never the Docker socket. See "Running the published image" in deploy/README.md.
+# this machine and never the Docker socket. See "Install" in deploy/README.md.
 #   USHER_VERSION  the image version to run, for example 1.2.3; the newest when unset
 # Settings are in /data/usher.toml in the data volume (deploy/usher.example.toml lists every setting). Inside the
 # container Usher listens on all addresses by default, which the published port needs; leave server.bind out.

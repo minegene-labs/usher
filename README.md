@@ -53,7 +53,7 @@ A web app for your media server: search for a movie or show, tap **Get it**, and
 
 ## Requirements
 
-- A server with Linux, systemd, Docker with Docker Compose 2.20.2 or later, `git`, `curl` and Python 3.11+ (the full list is in [deploy/README.md](deploy/README.md#requirements)).
+- A server with Linux and Docker with Docker Compose 2.20.2 or later. Usher runs from its published image, so nothing is built or compiled on the server. The optional install folder with a helper script needs a few more tools (listed under Requirements for the install folder in [deploy/README.md](deploy/README.md#requirements-for-the-install-folder)).
 - Jellyfin, Sonarr, Radarr, Prowlarr and Transmission already running and reachable from the server.
 - A reverse proxy with HTTPS in front of Usher, such as Caddy. Usher listens on `127.0.0.1` only (the published image listens on all addresses inside its container, with its port published on `127.0.0.1` only).
 - A free TMDb token for Discover (optional).
@@ -74,9 +74,11 @@ Usher is checked every week against the latest release of each integration, and 
 
 ## Quick start
 
-1. Follow [deploy/README.md](deploy/README.md): it installs Usher into one folder, sets up the optional daily update and covers updating and upgrading. To run the published image from one Compose file instead, follow [Running the published image](deploy/README.md#running-the-published-image), which has its own steps for settings and the first account; steps 2 and 3 below are for the install folder.
-2. Copy [deploy/usher.example.toml](deploy/usher.example.toml) to `config/usher.toml` in the install folder and set at least `media_server.user_id` (`sudo usher-user ids` lists the IDs). Every key is in [docs/configuration.md](docs/configuration.md).
-3. Add an account: `sudo usher-user add <name> [Display Name]`. A new Usher with no accounts also prints a setup code in its log: open its address, enter the code and create the first account there. The next step connects each app: enter its address and key, press Test, and Usher says whether that version is supported.
+1. Follow the six steps in [Install](deploy/README.md#install). In short: download [`compose.yaml`](compose.yaml), put the secrets in a `.env` file beside it, copy [deploy/usher.example.toml](deploy/usher.example.toml) to `usher.toml`, set its address (`server.origin`), the proxy address and your apps' addresses, remove its `server.bind` line, and copy it into the data volume. Only the published image and `compose.yaml` are used; every key is in [docs/configuration.md](docs/configuration.md).
+2. Look up the IDs with `docker compose run --rm --no-deps usher python -m usher.cli ids`, and set `media_server.user_id` and the two `quality_profile_id` keys. Then start it with `docker compose up -d --wait`.
+3. Add an account. A new Usher with no accounts prints a setup code in its log (`docker compose logs usher`): open its address, enter the code and create the first account there. Or: `docker compose exec usher python -m usher.cli add <name>`. The next step connects each app: enter its address and key, press Test, and Usher says whether that version is supported.
+
+Update with `docker compose pull && docker compose up -d`. A server that wants a helper script, accounts through `usher-user` and an optional daily update can use the [install folder](deploy/README.md#the-install-folder-optional) instead.
 
 ## Documentation
 
@@ -94,6 +96,8 @@ Usher is checked every week against the latest release of each integration, and 
 
 ## On the server
 
+These commands are for an [install folder](deploy/README.md#the-install-folder-optional) set up with `setup.sh`. With the plain Compose install, use `docker compose` in the folder that holds `compose.yaml` (see [Install](deploy/README.md#install)).
+
 | Command | Does |
 | --- | --- |
 | `sudo bash /opt/usher/src/deploy/setup.sh` | First-time setup (safe to re-run; also sets the recycle bin). Shown for the default install folder; see [deploy/README.md](deploy/README.md) for another |
@@ -106,6 +110,8 @@ Usher is checked every week against the latest release of each integration, and 
 | `sudo docker logs --tail 50 usher` | Recent log lines: sign-ins, failures, integrations that stopped answering |
 
 ## Developing
+
+This section is the way to work on Usher, not to run it: to run Usher, see Quick start.
 
 The pictures at the top come from Usher's test fakes, with a made-up account and generated placeholder posters instead of real artwork. Redo them with `python3 tools/screenshots.py` whenever a screen they show changes.
 

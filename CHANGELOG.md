@@ -4,6 +4,9 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+### Changed
+- The install instructions now start with the published container image and `compose.yaml` alone, with nothing built on the server. The install folder with its helper script is described as an optional extra.
+
 ## [1.4.11]
 
 ### Added
