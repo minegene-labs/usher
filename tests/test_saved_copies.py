@@ -86,6 +86,22 @@ out({ shown: lists.show("library"), boxes: [...boxes.keys()] });
         self.assertIsNone(got["shown"])
         self.assertEqual(got["boxes"], [], "another account's copies are deleted, artwork included")
 
+    def test_a_copy_saved_before_builds_existed_is_not_shown(self):
+        got = run("""
+signedInAs(7);
+await lists.load("library");
+await flush();
+const box = await caches.open("usher-data");
+const saved = await (await box.match("/saved/library")).json();
+delete saved.build;
+saved.version = "1.4.10";
+await box.put("/saved/library", new Response(JSON.stringify(saved)));
+opened();
+await lists.restore();
+out(lists.show("library"));
+""")
+        self.assertIsNone(got)
+
     def test_a_copy_from_another_build_is_not_shown(self):
         got = run("""
 signedInAs(7, "1.0.0+aaaaaaaa");

@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from . import __version__, artwork, config
-from .stamp import build_id, etag as file_etag, stamp
+from .stamp import STATIC_TYPES, build_id, etag as file_etag, stamp
 from .auth import COOKIE, Auth
 from .actions import Actions, Problem
 from .auth_routes import AuthRoutes, describe_device
@@ -53,7 +53,6 @@ SECURITY_HEADERS = {
         "camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), hid=(), midi=(), display-capture=(), interest-cohort=()"
     ),
 }
-STATIC_TYPES = {".html", ".css", ".js", ".webmanifest", ".png", ".svg", ".ico", ".json"}
 ART = re.compile(r"^/api/art/(sonarr|radarr)/(\d{1,9})$|^/api/art/jellyfin/([0-9a-f]{32})(?:/(Primary|Thumb|Backdrop))?$")
 REMOTE_ART = re.compile(r"^/api/art/remote/([0-9a-f]{24})$")
 MAX_BODY = 8 * 1024

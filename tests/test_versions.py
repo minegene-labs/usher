@@ -78,12 +78,41 @@ class BuildIdTests(unittest.TestCase):
 
     def test_changing_a_script_a_style_or_a_picture_changes_it(self):
         seen = {stamp.build_id(self.web)}
-        for name, new in (("app.js", "export const a = 2;\n"), ("app.css", "body { margin: 1px; }\n"), ("icons/icon.png", b"\x89PNG two")):
+        for name, extra in (("app.js", b"// more\n"), ("app.css", b"/* more */\n"), ("icons/icon.png", b"two")):
             with self.subTest(name=name):
-                path = self.web / name
-                path.write_bytes(new if isinstance(new, bytes) else new.encode())
+                with (self.web / name).open("ab") as f:  # longer, so the change shows even on a coarse clock
+                    f.write(extra)
                 seen.add(stamp.build_id(self.web))
         self.assertEqual(len(seen), 4, "each change gave a build not seen before")
+
+    def test_the_same_files_always_give_the_same_build_and_other_files_another(self):
+        other = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, other, ignore_errors=True)
+        (other / "app.js").write_text("export const b = 2;\n")
+        self.assertEqual(stamp.build_id(self.web), stamp.build_id(self.web))
+        self.assertNotEqual(stamp.build_id(self.web), stamp.build_id(other))
+
+    def test_an_unchanged_folder_is_not_read_again(self):
+        stamp.build_id(self.web)
+        with mock.patch.object(Path, "read_bytes", side_effect=AssertionError("read again")):
+            stamp.build_id(self.web)
+
+    def test_files_the_server_does_not_serve_change_nothing(self):
+        before = stamp.build_id(self.web)
+        (self.web / "app.js~").write_text("a backup")
+        (self.web / ".DS_Store").write_bytes(b"x")
+        self.assertEqual(stamp.build_id(self.web), before)
+
+    def test_a_file_that_vanishes_while_it_runs_is_left_out_not_an_error(self):
+        real = Path.read_bytes
+
+        def vanishing(path):
+            if path.name == "app.css":
+                raise FileNotFoundError(path)
+            return real(path)
+
+        with mock.patch.object(Path, "read_bytes", vanishing):
+            self.assertRegex(stamp.build_id(self.web), r"\+[0-9a-f]{8}$")
 
     def test_adding_or_renaming_a_file_changes_it(self):
         before = stamp.build_id(self.web)

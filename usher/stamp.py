@@ -10,6 +10,7 @@ from pathlib import Path
 
 from . import __version__
 
+STATIC_TYPES = {".html", ".css", ".js", ".webmanifest", ".png", ".svg", ".ico", ".json"}  # what the server serves from web/
 PLACEHOLDER = "__USHER_BUILD__"
 STAMPED = ("updater.js", "sw.js")  # paths below web/, where the placeholder is replaced
 
@@ -19,15 +20,29 @@ _seen = {}  # web folder -> (what its files looked like, the fingerprint read fr
 def build_id(web_dir):
     """The version, a plus sign and eight hex digits that change whenever any file under `web_dir` does, e.g. `1.4.10+3fa9c1e2`.
 
-    The files are read again only when one has a new size or modified time: this runs on every page and file request."""
-    root = Path(web_dir)
-    files = sorted(p for p in root.rglob("*") if p.is_file() and not any(part.startswith(".") for part in p.relative_to(root).parts))
-    looks = tuple((p.relative_to(root).as_posix(), p.stat().st_mtime_ns, p.stat().st_size) for p in files)
+    Only the files the server serves count (`STATIC_TYPES`), so a stray backup file changes nothing. They are read again
+    only when one has a new size or modified time: this runs on every page and file request. A file that disappears while
+    this runs is left out, never an error: the next call sees the folder as it is then."""
+    root = Path(web_dir).resolve()
+    looks = []
+    for p in root.rglob("*"):
+        if p.suffix not in STATIC_TYPES:
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        if p.is_file():
+            looks.append((p.relative_to(root).as_posix(), st.st_mtime_ns, st.st_size))
+    looks.sort()
     kept = _seen.get(root)
     if not kept or kept[0] != looks:
         digest = hashlib.sha256()
-        for p in files:
-            digest.update(p.relative_to(root).as_posix().encode() + b"\0" + p.read_bytes() + b"\0")
+        for name, _, _ in looks:
+            try:
+                digest.update(name.encode() + b"\0" + (root / name).read_bytes() + b"\0")
+            except OSError:
+                continue
         kept = _seen[root] = (looks, digest.hexdigest()[:8])
     return f"{__version__}+{kept[1]}"
 
