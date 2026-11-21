@@ -4,7 +4,7 @@
 // The server writes its build (the version and a fingerprint of the app's files) over the placeholder when it serves
 // this file (usher/stamp.py): every deploy that changes the app is a new service worker, which replaces the saved shell.
 const VERSION = "usher-__USHER_BUILD__";
-const SHELL = ["/", "/index.html", "/app.css", "/account.css", "/sheets.css", "/discover.css", "/media.css", "/menu.css", "/notify.css", "/storage.css", "/status.css", "/changelog.css", "/app.js", "/data.js", "/dom.js", "/util.js", "/posters.js", "/prefetch.js", "/rows.js", "/filters.js", "/device.js", "/menu.js", "/storage.js", "/watch.js",
+const SHELL = ["/", "/index.html", "/app.css", "/account.css", "/sheets.css", "/discover.css", "/media.css", "/menu.css", "/notify.css", "/storage.css", "/status.css", "/changelog.css", "/app.js", "/data.js", "/dom.js", "/util.js", "/posters.js", "/prefetch.js", "/rows.js", "/filters.js", "/device.js", "/menu.js", "/storage.js", "/recycle.js", "/watch.js",
   "/updater.js", "/shell.js", "/home.js", "/downloads.js", "/upcoming.js", "/status.js", "/settings.js", "/notify.js", "/advanced.js", "/updates.js", "/sheets.js", "/sheetdrag.js", "/search.js",
   "/discover.js", "/account.js", "/setup.js", "/connect.js", "/changelog.js", "/startup.js", "/manifest.webmanifest",
   "/icons/icon-192.png", "/icons/apple-touch-icon.png", "/icons/favicon.png", "/icons/tmdb.svg"];

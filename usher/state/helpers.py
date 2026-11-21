@@ -94,6 +94,15 @@ def recycle_usage(path):
     return {"items": items, "bytes": freeable}
 
 
+def recycle_policy(conf):
+    """Whether Sonarr or Radarr has a recycle bin and how many days it keeps things, from its media management settings.
+    `days` is None when the app never empties it. Without a bin, removed files are deleted for good."""
+    if not isinstance(conf, dict) or not str(conf.get("recycleBin") or "").strip():
+        return {"on": False, "days": None}
+    days = conf.get("recycleBinCleanupDays")
+    return {"on": True, "days": days if isinstance(days, int) and days > 0 else None}
+
+
 def sites_not_responding(indexers, statuses, now=None):
     """Names of the search sites that are turned on but paused after failing, from Prowlarr's own per-site state.
     Its health warnings linger until something next succeeds, so only this says whether a site is down now."""

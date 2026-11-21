@@ -44,6 +44,7 @@ class State(Polling, Rows, StatusParts, Journey, MediaServer, Events, Lists):
             "ok": {},
             "series": [],
             "recycle": None,
+            "bin": {"tv": None, "movie": None},  # each app's recycle bin setting; None until it has been read
         }
         self._cache = TTLCache(60, 20)  # Library, Upcoming and Tidy up, each with its own age limit
         self._progress: dict = {}  # download key -> (progress, when it last moved)

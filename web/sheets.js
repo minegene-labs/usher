@@ -3,6 +3,7 @@ import { api, details, lists, store } from "./data.js";
 import { titleRow } from "./rows.js";
 import { h, icon } from "./dom.js";
 import { fmt } from "./util.js";
+import { afterRemoving, appOf } from "./recycle.js";
 import { poster } from "./posters.js";
 import { away } from "./device.js";
 import { dragToClose } from "./sheetdrag.js";
@@ -201,7 +202,7 @@ export const Sheets = (Base) => class extends Base {
   async remove(item) {
     const size = item.size ? ` (${fmt.gb(item.size)})` : "";
     const what = item.kind === "show" ? "every episode of it" : "it";
-    if (!confirm(`Remove ${item.title}?\n\nThis deletes ${what}${size}. It goes to the recycle bin for 7 days; to get the space back sooner, empty the recycle bin on the Status screen.`)) return;
+    if (!confirm(`Remove ${item.title}?\n\nThis deletes ${what}${size}. ${afterRemoving(store.snap?.status?.bin, appOf(item.kind))}`)) return;
     try {
       await api("/api/remove", { method: "POST", body: { kind: item.kind, id: item.id } });
       this.sheet?.dialog.close();
@@ -233,7 +234,7 @@ export const Sheets = (Base) => class extends Base {
       return [
         h("h2", { id: "sheet-title", class: "sheet-title" }, "Tidy up"),
         h("p", { class: "footnote" }, data.items.length
-          ? `${data.items.length} watched title${data.items.length === 1 ? "" : "s"} using ${fmt.gb(data.bytes)}. Only movies and whole seasons that have been watched to the end on Home are listed. Removing one won't download it again; it stays in the recycle bin for 7 days.`
+          ? `${data.items.length} watched title${data.items.length === 1 ? "" : "s"} using ${fmt.gb(data.bytes)}. Only movies and whole seasons that have been watched to the end on Home are listed. Removing one won't download it again.`
           : "Nothing to tidy: no movie or whole season has been watched to the end on Home yet."),
         data.items.length ? h("div", { class: "list" }, data.items.map((it) => titleRow({ art: it.art, title: it.title,
           subtitle: [it.subtitle, fmt.gb(it.size)].filter(Boolean).join(" · "),
@@ -243,7 +244,7 @@ export const Sheets = (Base) => class extends Base {
               keepOrBack("/api/tidy/keep", { kind: it.kind, id: it.id, season: it.season }, `${it.title} will stay.`, e.currentTarget) }, "Keep"),
             h("button", { class: "btn danger small", "aria-label": `Remove ${it.title} ${it.subtitle}`, onclick: async (e) => {
             const what = it.kind === "season" ? `${it.title}, ${it.subtitle.split(" · ")[0]}` : it.title;
-            if (!confirm(`Remove ${what}?\n\nThis deletes ${fmt.gb(it.size)} and stops it downloading again. It stays in the recycle bin for 7 days; to get the space back sooner, empty the recycle bin on the Status screen.`)) return;
+            if (!confirm(`Remove ${what}?\n\nThis deletes ${fmt.gb(it.size)} and stops it downloading again. ${afterRemoving(store.snap?.status?.bin, appOf(it.kind))}`)) return;
             e.target.disabled = true;
             try {
               const r = await api("/api/tidy/remove", { method: "POST", body: { kind: it.kind, id: it.id, season: it.season } });

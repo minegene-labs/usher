@@ -66,10 +66,17 @@ class StatusParts:
                 "low": low,
                 "lowAt": self.s.low_space_gb * 1_000_000_000,
                 "recycle": r["recycle"],
+                "bin": r.get("bin") or {},
                 "split": storage_split(self.s, r, total - free),
             }
             parts.append({"name": "Storage", "ok": not low, "text": f"{free / 1e9:.0f} GB free" + (" — getting full" if low else "")})
-        return {"parts": parts, "storage": storage, "ok": all(p["ok"] for p in parts)}
+        bin_ = r.get("bin") or {}
+        notes = [
+            f"Removed {what} can't be got back: {app} has no recycle bin set, so removing deletes the files for good."
+            for key, what, app in (("tv", "TV shows", "Sonarr"), ("movie", "movies", "Radarr"))
+            if (bin_.get(key) or {}).get("on") is False
+        ]
+        return {"parts": parts, "storage": storage, "bin": bin_, "notes": notes, "ok": all(p["ok"] for p in parts)}
 
     def attention(self):
         """Downloads someone has to act on, one line each, for /healthz on the server (the daily digest).

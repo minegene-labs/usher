@@ -8,7 +8,7 @@ from ..actions import season_of
 from ..clients import ApiError
 from ..kept import Kept
 from ..missing import MissingSearcher
-from .helpers import couldnt_find_after, recycle_usage, research_every, sites_not_responding
+from .helpers import couldnt_find_after, recycle_policy, recycle_usage, research_every, sites_not_responding
 
 log = logging.getLogger("usher.state")
 
@@ -61,8 +61,17 @@ class Polling:
         self._played(r["ready"])
         r["ok"]["jellyfin_up"] = self.jf.healthy()
         r["recycle"] = recycle_usage(self.s.recycle_dir)
+        self._poll_recycle_policy()
         r["home"] = self._try("jellyfin", self._jellyfin_home, r.get("home"))
         self._confirm_in_jellyfin()
+
+    def _poll_recycle_policy(self):
+        """Read each app's recycle bin setting, so people are only told they can get something back when they can."""
+        r = self._raw
+        policy = {}
+        for key, app in (("tv", self.sonarr), ("movie", self.radarr)):
+            policy[key] = self._try(app.name, lambda app=app: recycle_policy(app.get("config/mediamanagement")), (r.get("bin") or {}).get(key))
+        r["bin"] = policy
 
     def _poll_fast(self):
         ts = self._try("transmission", self.tr.torrents, None)

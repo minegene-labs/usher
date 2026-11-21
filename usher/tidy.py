@@ -3,7 +3,7 @@
 Watched means played on the shared viewing account in Jellyfin (media_server.user_id). A season counts only when
 every episode of it that's here has been played. Nothing is ever removed by itself: people pick what goes, and
 removing unmonitors it (so it isn't downloaded again) and deletes its files through Sonarr or Radarr, which put
-them in the 7-day recycle bin.
+them in the recycle bin if the app has one.
 """
 
 import logging

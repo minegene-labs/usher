@@ -12,7 +12,7 @@ export const Status = (Base) => class extends Base {
     const wrap = h("div", { class: "content status" }, this.offlineBanner());
     if (s && !s.loading) {
       const st = s.status;
-      wrap.append(this.summaryCard(st), this.healthSection(st));
+      wrap.append(this.summaryCard(st), ...(st.notes || []).map((n) => h("p", { class: "footnote" }, n)), this.healthSection(st));
       if (st.storage) wrap.append(storageSection(st.storage, this, lists.show("tidy")));
     } else if (!this.offlineBanner()) {
       wrap.append(this.summaryCard(null));   // same shape as the answer, so nothing jumps when it arrives

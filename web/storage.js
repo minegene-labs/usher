@@ -1,6 +1,7 @@
 // Usher — Status → Storage: one usage bar split by what fills the disk, free space, with Tidy up as its last row.
 import { h, icon } from "./dom.js";
 import { fmt } from "./util.js";
+import { binEmptying } from "./recycle.js";
 
 const PARTS = {
   movies: ["Movies", "--blue"], tv: ["TV", "--green"], family: ["Family libraries", "--purple"],
@@ -29,7 +30,7 @@ export function storageSection(storage, app, tidy) {
     h("i", { class: "free", style: { "flex-grow": Math.max(0, storage.free) } }));
   const rows = parts.map((p) => {
     const note = p.key === "recycle" && recycle?.items
-      ? h("div", { class: "sub" }, `${recycle.items} removed item${recycle.items === 1 ? "" : "s"}, emptied by itself after 7 days`) : null;
+      ? h("div", { class: "sub" }, [`${recycle.items} removed item${recycle.items === 1 ? "" : "s"}`, binEmptying(storage.bin)].filter(Boolean).join(", ")) : null;
     return legendRow(PARTS[p.key][1], PARTS[p.key][0], fmt.gb(p.bytes), note);
   });
   const limit = fmt.gb(storage.lowAt || 0);

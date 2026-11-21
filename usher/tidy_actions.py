@@ -14,7 +14,7 @@ log = logging.getLogger("usher.actions")
 class TidyActions:
     def tidy_remove(self, kind: str, item_id: int, season, user):
         """Remove one watched movie or season picked from the tidy-up list: unmonitored so it isn't downloaded
-        again, files to the 7-day recycle bin. Only what's still on the list can go."""
+        again, files to the recycle bin (if Sonarr or Radarr has one). Only what's still on the list can go."""
         self.state.drop_cache()
         listed = self.state.tidy()["items"]
         if not any(i["kind"] == kind and i["id"] == item_id and i["season"] == season for i in listed):

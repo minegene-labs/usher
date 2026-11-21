@@ -5,6 +5,7 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 ## [Unreleased]
 
 ### Fixed
+- Removing a title and Tidy up no longer promise a recycle bin that isn't there. Usher reads each of Sonarr's and Radarr's recycle bin setting: with one, the confirmation and Storage name the app's own number of days (or say it is kept until emptied); without one, the confirmation says the files are deleted for good, and Status adds a note that removed titles can't be got back.
 - A phone now gets the new app files after every update of the server, not only after a numbered release. Before, an app already on the phone could keep showing the old screens until the next release. Settings → About now shows a short code after the version, which changes with each update, and the reload banner reads "A new version of Usher is ready."
 
 ## [1.4.6]

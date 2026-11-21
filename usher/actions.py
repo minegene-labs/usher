@@ -344,7 +344,7 @@ class Actions(SearchActions, StopActions, TidyActions):
 
     # recycle bin -------------------------------------------------------------------
     def empty_recycle(self, user, recycle_dir):
-        """Delete everything in the recycle bin now, instead of after 7 days."""
+        """Delete everything in the recycle bin now, instead of waiting for the app to empty it."""
         import shutil
 
         root = os.path.realpath(recycle_dir)

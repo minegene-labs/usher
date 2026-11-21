@@ -593,6 +593,7 @@ def arr_handler(app):
                     "/api/v3/queue": {"totalRecords": len(QUEUE_TV + sim_queue("show")), "records": QUEUE_TV + sim_queue("show")},
                     "/api/v3/wanted/missing": {"records": MISSING},
                     "/api/v3/series": SERIES,
+                    "/api/v3/config/mediamanagement": {"recycleBin": "/recycle", "recycleBinCleanupDays": 7},
                     "/api/v3/calendar": CAL_TV,
                     "/api/v3/health": [{"source": "IndexerStatusCheck", "type": "warning", "message": "Indexers unavailable due to failures: YTS"}],
                     "/api/v3/diskspace": [{"path": "/", "freeSpace": 28.4e9, "totalSpace": 243e9}, {"path": "/boot", "freeSpace": 1.5e9, "totalSpace": 2e9}],
@@ -601,6 +602,7 @@ def arr_handler(app):
                 routes = {
                     "/api/v3/queue": {"totalRecords": len(QUEUE_MOVIES + sim_queue("movie")), "records": QUEUE_MOVIES + sim_queue("movie")},
                     "/api/v3/movie": MOVIES,
+                    "/api/v3/config/mediamanagement": {"recycleBin": "/recycle", "recycleBinCleanupDays": 7},
                     "/api/v3/calendar": [m for m in MOVIES if m.get("digitalRelease")],
                     "/api/v3/health": [{"source": "IndexerStatusCheck", "type": "warning", "message": "Indexers unavailable due to failures: YTS"}],
                 }
