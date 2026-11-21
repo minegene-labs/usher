@@ -3,7 +3,7 @@ name: Promote
 # after a merge), or by Auto-merge with the squash commit when the pull request's own run already tested
 # exactly that commit's content: move the stable branch (which Release starts from) to that commit, then
 # report on the merge. Nothing is released here: a release, with its tag, notes and container image, is made
-# by hand with the Release workflow (release.yml). It isn't a workflow_run of Tests: GitHub doesn't send that
+# by the Release workflow (release.yml), daily when everything planned is done or by hand. It isn't a workflow_run of Tests: GitHub doesn't send that
 # event for a run started with a workflow's own token, so merges made by Auto-merge would never be promoted.
 # The report job, also when promote failed, checks the merge (.github/scripts/merge_report.py lists what) and
 # comments the result on the pull request. Each job asks for its own permissions: only promote can write to

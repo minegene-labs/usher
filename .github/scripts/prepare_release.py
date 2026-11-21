@@ -1,7 +1,7 @@
 """Prepares a release: gives the collected changelog lines their version and sets the app's version to it.
 
 Merged pull requests add their changelog lines under `## [Unreleased]`; nothing is released on a merge. The Release
-workflow, run by hand with a version, calls this script on the tested commit. It
+workflow calls this script on the tested commit, with the version its plan job chose or the maintainer typed. It
 - checks the version: three numbers separated by dots (1.5.0), at least the version the app already has and newer than every release
   (tags `v<version>`), so a release can never be overwritten or a version go backwards;
 - renames `## [Unreleased]` to `## [<version>]` and leaves a fresh, empty `## [Unreleased]` above it. With no lines

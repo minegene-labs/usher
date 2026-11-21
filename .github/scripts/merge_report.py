@@ -3,7 +3,7 @@
 Reads the merged pull request, its squash commit, `stable` and the open issues from GitHub's REST API and prints a
 report: a verdict line (`OK` or `PROBLEM`), then one line per check. The promote workflow posts it as a comment on the
 pull request and in the job summary; a PROBLEM also opens or updates one issue and turns the run red.
-tests/test_merge_report.py has the cases. A merge makes no release (the Release workflow is run by hand), so no check
+tests/test_merge_report.py has the cases. A merge makes no release (the Release workflow makes it, daily or by hand), so no check
 looks at tags or images.
 
 - `promote` finished: when it failed, `stable` may not have moved.
@@ -79,7 +79,7 @@ def check_promote(merge):
 
 
 def check_version(merge):
-    """Only a release, made by hand, sets the version, so a merge normally keeps it."""
+    """Only a release sets the version, so a merge normally keeps it."""
     version, before = merge["version"], merge["previous_version"]
     if not version:
         return "problem", "No version found in usher/__init__.py at the merge commit."
@@ -223,12 +223,12 @@ def collect(api, sha, promote="success", now=None):
 class GitHub:
     """GitHub's REST API for one repository, read-only."""
 
-    def __init__(self, repo, token, base="https://api.github.com"):
+    def __init__(self, repo, token, base="https://api.github.com", agent="usher-merge-report"):
         self.root = f"{base.rstrip('/')}/repos/{repo}/"
         self.headers = {
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
-            "User-Agent": "usher-merge-report",
+            "User-Agent": agent,
             "X-GitHub-Api-Version": "2022-11-28",
         }
 

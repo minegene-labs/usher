@@ -1,6 +1,13 @@
 name: Release
-# Run by hand, with the new version, when the changes collected under `## [Unreleased]` in CHANGELOG.md are worth a
-# release. Merged pull requests only add their lines there; nothing is released on a merge (Promote moves `stable`).
+# Runs by itself once a day and makes a release when everything planned for it is done, or by hand with the new version
+# for a fix that has to go out on its own or a release before the planned work is done. Merged pull requests only add
+# their lines under `## [Unreleased]` in CHANGELOG.md; nothing is released on a merge (Promote moves `stable`).
+# plan: decides whether to release and which version (.github/scripts/release_gate.py). A hand run passes its version
+# through. The daily run releases only when no open issue is labelled `next-release` or `P1` (apart from `hold`),
+# something is collected under [Unreleased], the latest commit on main is 24 hours old, no pull request merged since the
+# last release carries `needs-server`, main is at `stable` and no other Release run is in progress; otherwise it ends
+# green and its log names the condition that was not met. The version is worked out: the minor number up when something
+# was added, else the patch number. The job reads issues, runs and the git history and holds no secret.
 # prepare: gives the collected lines their version (.github/scripts/prepare_release.py renames `[Unreleased]`, leaves
 # a fresh one and sets the version in usher/__init__.py, the only file that carries it), commits that to main and pushes it. The protect-main
 # ruleset has no bypass for GitHub Actions itself, so the push is made as the release GitHub App, which is on the
@@ -21,6 +28,8 @@ name: Release
 # making the commit again. The version reaches every shell through an environment variable, never through an
 # expression in a command.
 on:
+  schedule:
+    - cron: "17 4 * * *"    # daily, UTC; off the hour, when GitHub's schedule is busiest
   workflow_dispatch:
     inputs:
       version:
@@ -29,7 +38,38 @@ on:
         type: string
 permissions: {}
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read         # check out, and read the history
+      issues: read           # the open issues that are planned, the merged pull requests that need a server step
+      pull-requests: read    # pull requests come with the issue lists
+      actions: read          # whether another Release run is in progress
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EVENT_NAME: ${{ github.event_name }}
+      TYPED_VERSION: ${{ inputs.version }}    # empty on the daily run
+    outputs:
+      release: ${{ steps.gate.outputs.release }}
+      version: ${{ steps.gate.outputs.version }}
+    steps:
+      - name: Check that this runs on main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          [ "$REF" = refs/heads/main ] || { echo "::error::Run Release on the main branch."; exit 1; }
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0    # every tag and stable
+          persist-credentials: false
+      - name: Decide whether to release, and which version
+        id: gate
+        run: python3 .github/scripts/release_gate.py
+
   prepare:
+    needs: [plan]
+    if: ${{ needs.plan.outputs.release == 'yes' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: release    # holds the app's key; limited to the main branch in the repository's settings
@@ -39,7 +79,7 @@ jobs:
       group: release
       cancel-in-progress: false
     env:
-      VERSION: ${{ inputs.version }}
+      VERSION: ${{ needs.plan.outputs.version }}    # a version number: checked by the plan job, and again when the files are prepared
     outputs:
       sha: ${{ steps.push.outputs.sha }}
       version: ${{ steps.push.outputs.version }}

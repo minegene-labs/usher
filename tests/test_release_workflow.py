@@ -1,4 +1,5 @@
-"""The Release workflow is run by hand with a version: it gives the changes collected under `## [Unreleased]` that
+"""The Release workflow makes a release when everything planned for it is done (daily, decided by the plan job:
+tests/test_release_gate.py) or when run by hand with a version: it gives the changes collected under `## [Unreleased]` that
 version, pushes that commit to main as the release GitHub App (the protect-main ruleset has no bypass for GitHub Actions
 itself), waits for Tests to pass on it, tags it, publishes the release with its notes and an announcement, and publishes
 the image. Nothing a merge starts does any of this (tests/test_workflows.py). The workflow's text is checked, and the
@@ -27,19 +28,22 @@ def _step(job, name):
 
 
 class TriggerTests(unittest.TestCase):
-    def test_it_runs_only_by_hand_and_asks_for_a_version(self):
+    def test_it_runs_daily_and_by_hand_and_a_hand_run_asks_for_a_version(self):
         on = re.search(r"(?m)^on:\n((?:[ #].*\n)+)", TEXT).group(1)
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):", on), ["workflow_dispatch"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):", on), ["schedule", "workflow_dispatch"])
+        self.assertRegex(on, r'(?m)^    - cron: "\d+ \d+ \* \* \*"')
         self.assertRegex(on, r"(?m)^      version:\n(?:        .*\n)*?        required: true\n")
         self.assertRegex(on, r"(?m)^        type: string$")
 
     def test_the_jobs_run_in_order_and_each_asks_for_its_own_permissions(self):
         self.assertRegex(TEXT, r"(?m)^permissions: \{\}$")
-        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", TEXT.split("\njobs:\n", 1)[1]), ["prepare", "tested", "publish", "image"])
+        self.assertEqual(re.findall(r"(?m)^  ([\w-]+):$", TEXT.split("\njobs:\n", 1)[1]), ["plan", "prepare", "tested", "publish", "image"])
+        self.assertEqual(_permissions(_job(TEXT, "plan")), {"contents": "read", "issues": "read", "pull-requests": "read", "actions": "read"})
         self.assertEqual(_permissions(_job(TEXT, "prepare")), {"contents": "read"})  # the push is made with the app's token
         self.assertEqual(_permissions(_job(TEXT, "tested")), {"contents": "read"})
         self.assertEqual(_permissions(_job(TEXT, "publish")), {"contents": "write", "discussions": "write"})
         self.assertEqual(_permissions(_job(TEXT, "image")), {"contents": "read", "packages": "write", "id-token": "write", "attestations": "write"})
+        self.assertRegex(_job(TEXT, "prepare"), r"(?m)^    needs: \[plan\]$")
         self.assertRegex(_job(TEXT, "tested"), r"(?m)^    needs: \[prepare\]$")
         self.assertRegex(_job(TEXT, "publish"), r"(?m)^    needs: \[prepare, tested\]$")
 
@@ -47,13 +51,15 @@ class TriggerTests(unittest.TestCase):
         self.assertRegex(_job(TEXT, "prepare"), r"(?m)^    concurrency:\n      group: release\n      cancel-in-progress: false$")
 
     def test_no_expression_reaches_a_shell_line(self):
-        """The version, a hand-typed input, goes through an environment variable only."""
+        """The version, a hand-typed input, goes through an environment variable only, the plan job's output after it."""
         for match in re.finditer(r"(?m)^        run: (?:\|\n((?:          .*\n|\n)+)|(.*)\n)", TEXT):
             self.assertNotIn("${{", "".join(match.groups("")))
-        self.assertIn("VERSION: ${{ inputs.version }}", _job(TEXT, "prepare"))
+        self.assertIn("TYPED_VERSION: ${{ inputs.version }}", _job(TEXT, "plan"))
+        self.assertIn("VERSION: ${{ needs.plan.outputs.version }}", _job(TEXT, "prepare"))
 
     def test_the_token_is_in_the_jobs_that_need_it_only(self):
         self.assertNotIn("github.token", _job(TEXT, "prepare"))  # it pushes with the app's token
+        self.assertEqual(_job(TEXT, "plan").count("github.token"), 1)  # it only reads
         self.assertEqual(_job(TEXT, "tested").count("github.token"), 1)
         self.assertEqual(_job(TEXT, "publish").count("github.token"), 1)
         self.assertEqual(_job(TEXT, "image").count("github.token"), 1)  # the registry sign-in
