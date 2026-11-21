@@ -185,7 +185,7 @@ class SetkeyTests(unittest.TestCase):
         self.env.write_text("A=1\nB=2\n")
         run = self.setkey("C", "3", fake_grep_status=2)
         self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
-        self.assertIn("FAIL: can't read", run.stdout)
+        self.assertIn("FAIL: can't update", run.stdout)
         self.assertNotIn("reached the end", run.stdout)
         self.assertEqual(self.env.read_text(), "A=1\nB=2\n")
         self.assertFalse((self.tmp / ".env.new").exists(), "left a half-written file behind")
@@ -197,9 +197,39 @@ class SetkeyTests(unittest.TestCase):
         self.addCleanup(self.env.chmod, 0o600)
         run = self.setkey("C", "3")
         self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
-        self.assertIn("FAIL: can't read", run.stdout)
+        self.assertIn("FAIL: can't update", run.stdout)
         self.env.chmod(0o600)
         self.assertEqual(self.env.read_text(), "A=1\nB=2\n")
+
+    def test_an_env_that_is_not_a_file_stops_even_for_root(self):
+        self.env.mkdir()
+        run = self.setkey("C", "3")
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("FAIL: can't update", run.stdout)
+        self.assertTrue(self.env.is_dir())
+        self.assertFalse((self.tmp / ".env.new").exists())
+
+    def test_a_failed_replace_stops_and_leaves_no_copy_of_the_secrets(self):
+        self.env.write_text("A=1\nB=2\n")
+        (self.bin / "mv").write_text(f"#!{BASH}\nexit 1\n")
+        (self.bin / "mv").chmod(0o755)
+        run = self.setkey("C", "3")
+        self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+        self.assertIn("FAIL: can't update", run.stdout)
+        self.assertEqual(self.env.read_text(), "A=1\nB=2\n")
+        self.assertFalse((self.tmp / ".env.new").exists(), "left a copy of the secrets behind")
+
+    def test_the_copy_is_private_from_the_moment_it_is_made(self):
+        """Every other secret is copied into it, so a default umask of 022 must not make it readable by others."""
+        self.env.write_text("A=1\n")
+        mode_log = self.tmp / "mode"
+        (self.bin / "grep").write_text(f"#!{BASH}\nstat -L -c %a /dev/stdout > '{mode_log}'\necho A=1\n")
+        (self.bin / "grep").chmod(0o755)
+        script = f'umask 022\n{self.func}\nsetkey B 2\n'
+        env = {"PATH": f"{self.bin}:/usr/bin:/bin", "DIR": str(self.tmp)}
+        run = subprocess.run([BASH, "-c", script], env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertEqual(mode_log.read_text().strip(), "600")
 
     def test_a_key_is_written_to_an_empty_env(self):
         self.env.write_text("")
@@ -217,3 +247,4 @@ class SetkeyTests(unittest.TestCase):
         self.env.write_text("A=1\nB=2\n")
         self.assertEqual(self.setkey("B", "3").returncode, 0)
         self.assertEqual(self.env.read_text(), "A=1\nB=3\n")
+        self.assertEqual(self.env.stat().st_mode & 0o777, 0o600)
