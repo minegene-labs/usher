@@ -89,7 +89,7 @@ If one is missing, Docker Compose refuses to start Usher and names it.
 
 ## Updating
 
-Usher runs from the image of a release, at the version in `USHER_VERSION` in `.env`. Nothing changes on the server until you update it, or turn on the daily update below. Each release is made by hand when enough changes have collected; Settings → About → Updates says when a newer one is out, with its notes and this command.
+Usher runs from the image of a release, at the version in `USHER_VERSION` in `.env`. Nothing changes on the server until you update it, or turn on the daily update below. A release is made by itself once everything planned for it is done, and by hand for a fix that can't wait; Settings → About → Updates says when a newer one is out, with its notes and this command.
 
 - **Update by hand:** `sudo usher-update` finds the newest release, sets `USHER_VERSION` in `.env` to it, pulls its image, restarts, and lets Docker Compose wait up to 2 minutes for the new container to be healthy (its health check asks `/healthz`). If it isn't, `usher-update` puts the previous version back and tells you. Or do it yourself: set `USHER_VERSION` in `.env` to the version you want and run `cd /opt/usher && sudo docker compose pull && sudo docker compose up -d`.
 - **Go back:** set `USHER_VERSION` in `.env` to the previous version and run the same two commands. The data folder keeps accounts and requests.

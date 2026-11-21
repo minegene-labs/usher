@@ -50,7 +50,7 @@ class AutoMergeChainTests(unittest.TestCase):
         self.assertIn("group: promote\n", promote)
 
     def test_a_merge_releases_nothing(self):
-        """Releases are made by hand (Release, tests/test_release_workflow.py): nothing a merge starts tags, publishes
+        """Releases are made by the Release workflow (tests/test_release_workflow.py): nothing a merge starts tags, publishes
         a release or builds an image."""
         for name in ("promote.yml", "tests.yml", "auto-merge.yml"):
             text = _read(name)

@@ -1,4 +1,4 @@
-"""The published image and the one generic compose file. Release, run by hand, builds the image for amd64 and arm64, pushes it with
+"""The published image and the one generic compose file. Release builds the image for amd64 and arm64, pushes it with
 the version and latest as tags and attests its build provenance; compose.yaml at the repository root runs that image
 with nothing from the machine it runs on. The install folder's deploy/compose.yaml runs the same image at the version in USHER_VERSION.
 The workflow and the files are read, not run: no registry is called."""
@@ -93,7 +93,7 @@ class ReleaseImageTests(unittest.TestCase):
                 self.assertNotIn(scope, permissions, name)
 
     def test_a_merge_publishes_no_image(self):
-        """The image is made by the Release workflow, run by hand; nothing a merge starts builds or tags one."""
+        """The image is made by the Release workflow; nothing a merge starts builds or tags one."""
         self.assertNotIn("buildx", _promote())
         self.assertNotIn("packages", _promote())
 
