@@ -1,4 +1,4 @@
-"""The server's local time: the container's time zone (TZ, an IANA name such as Europe/Paris), UTC when unset."""
+"""The server's local time: the container's time zone (TZ, an IANA name such as Etc/GMT-2), UTC when unset."""
 
 import os
 from datetime import datetime, timezone

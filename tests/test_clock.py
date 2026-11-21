@@ -18,10 +18,10 @@ def at(y, m, d, h):
 
 class ClockTests(unittest.TestCase):
     def test_local_hour_follows_the_clock_change(self):
-        with mock.patch.dict(os.environ, {"TZ": "Europe/Paris"}):
-            self.assertEqual(local_time(at(2026, 3, 28, 12)), "13:00")  # winter, UTC+1
-            self.assertEqual(local_time(at(2026, 3, 29, 12)), "14:00")  # summer, UTC+2
-            self.assertEqual(clock.to_local(datetime(2026, 7, 1, 12, tzinfo=timezone.utc)).hour, 14)
+        with mock.patch.dict(os.environ, {"TZ": "America/Adak"}):
+            self.assertEqual(local_time(at(2026, 3, 7, 12)), "02:00")  # winter, UTC-10
+            self.assertEqual(local_time(at(2026, 3, 9, 12)), "03:00")  # after the clocks change, UTC-9
+            self.assertEqual(clock.to_local(datetime(2026, 7, 1, 12, tzinfo=timezone.utc)).hour, 3)
 
     def test_utc_without_tz_or_with_a_bad_name(self):
         for env in ({}, {"TZ": "Not/AZone"}):
@@ -32,7 +32,7 @@ class ClockTests(unittest.TestCase):
         source = config.Source("usher.toml (made up)", {"media_server.user_id": "a" * 32})
         with mock.patch.dict(os.environ, {"TZ": "Not/AZone"}):
             self.assertTrue(any("Not/AZone" in n for n in config.check(source)))
-        with mock.patch.dict(os.environ, {"TZ": "Europe/Paris"}):
+        with mock.patch.dict(os.environ, {"TZ": "America/Adak"}):
             self.assertEqual(config.check(source), [])
 
     def test_the_old_offset_key_starts_normally_and_is_noted(self):

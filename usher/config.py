@@ -15,6 +15,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import clock
+
 
 log = logging.getLogger("usher.config")
 
@@ -339,10 +341,8 @@ def missing_file(source: Source) -> str:
 
 
 def _zone_notes():
-    from . import clock  # clock reads config, so it is imported here
-
     name = _env("TZ")
-    return [f"TZ is {name!r}, which is not a time zone name such as Europe/Paris: times are shown in UTC."] if name and not clock.valid(name) else []
+    return [f"TZ is {name!r}, which is not a time zone name such as Etc/GMT-2: times are shown in UTC."] if name and not clock.valid(name) else []
 
 
 def check(source: Source, strict: bool = True, setting_up: bool = False) -> list:

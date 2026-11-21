@@ -1,5 +1,6 @@
 """Which notifications fire, for whom, and when."""
 
+import os
 import tempfile
 import time
 import unittest
@@ -32,7 +33,7 @@ def req(rid, step, title="Example Show", stuck=False):
 class NotifyTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
-        zone = mock.patch.dict("os." + "environ", {"TZ": "Etc/GMT-10"})  # UTC+10, no clock changes
+        zone = mock.patch.dict(os.environ, {"TZ": "Etc/GMT-10"})  # UTC+10, no clock changes
         zone.start()
         self.addCleanup(zone.stop)
         self.store = Store(Path(self.tmp.name))
