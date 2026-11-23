@@ -4,6 +4,8 @@ All notable changes to Usher, newest first. The format follows [Keep a Changelog
 
 ## [Unreleased]
 
+## [1.4.12]
+
 ### Changed
 - Times in Status and messages now follow the server's time zone (the `TZ` setting, for example `Etc/GMT-2`) and change with summer time. The `server.utc_offset_minutes` setting is no longer used; a config that still has it starts normally and the log says it is ignored.
 - The install instructions now start with the published container image and `compose.yaml` alone, with nothing built on the server. The install folder with its helper script is described as an optional extra.
